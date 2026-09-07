@@ -7,7 +7,7 @@ import { connectDb } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { putObject, deleteObject } from "@/lib/r2";
 import { slugify } from "@/lib/utils";
-import { Product, Order, Category, toObjectId } from "@/lib/models";
+import { Product, Order, Category, toObjectId, type OrderItemBase } from "@/lib/models";
 
 export type ProductFormState = { error?: string };
 
@@ -165,6 +165,13 @@ export async function updateProduct(
   }
 
   let imageKeys = existing.imageKeys;
+  const deleteSet = new Set(
+    (formData.getAll("deleteImage") as string[]).filter((k) => typeof k === "string" && k.length > 0),
+  );
+  // Bỏ ảnh cũ đã đánh dấu xóa
+  if (deleteSet.size > 0) {
+    imageKeys = imageKeys.filter((k: string) => !deleteSet.has(k));
+  }
   const images = (formData.getAll("images") as File[]).filter(
     (f) => f instanceof File && f.size > 0,
   );
@@ -178,11 +185,14 @@ export async function updateProduct(
         images[i].type || "image/jpeg",
       );
     }
-    // Xóa ảnh cũ
-    for (const key of existing.imageKeys) {
+    // Thêm ảnh mới vào sau ảnh cũ được giữ (không thay toàn bộ)
+    imageKeys = [...imageKeys, ...newKeys];
+  }
+  // Xóa trên R2 những ảnh đã bỏ giữ
+  for (const key of deleteSet) {
+    if (existing.imageKeys.includes(key)) {
       await deleteObject(key).catch(() => null);
     }
-    imageKeys = newKeys;
   }
 
   await Product.updateOne(
@@ -242,11 +252,10 @@ export async function deleteProduct(formData: FormData) {
 }
 
 // ===== Đơn hàng: đổi trạng thái =====
-const ORDER_STATUS_VALUES = ["PENDING", "PAID", "FAILED", "CANCELLED", "REFUNDED"] as const;
+const ORDER_STATUS_VALUES = ["PENDING", "PAID", "FAILED", "CANCELLED"] as const;
 
 const ALLOWED_TRANSITIONS: Record<string, string[]> = {
   PENDING: ["PAID", "CANCELLED", "FAILED"],
-  PAID: ["REFUNDED"],
 };
 
 export async function updateOrderStatus(formData: FormData) {
@@ -274,6 +283,37 @@ export async function updateOrderStatus(formData: FormData) {
   revalidatePath("/admin");
   revalidatePath("/admin/don-hang");
   revalidatePath(`/admin/don-hang/${id}`);
+}
+
+// ===== Đơn hàng: thu hồi / hủy thu hồi theo từng sản phẩm =====
+export async function toggleOrderItemRevoked(formData: FormData): Promise<void> {
+  await requireAdmin();
+
+  const orderId = String(formData.get("orderId") ?? "");
+  const itemId = String(formData.get("itemId") ?? "");
+  const oid = toObjectId(orderId);
+  const iid = toObjectId(itemId);
+  if (!oid || !iid) return;
+
+  await connectDb();
+  const order = await Order.findOne({ _id: oid }).lean();
+  if (!order) return;
+  if (order.status !== "PAID") return;
+
+  const item = order.items.find(
+    (i: OrderItemBase & { _id: unknown }) => String(i._id) === itemId,
+  );
+  if (!item) return;
+
+  const revoked = !item.revoked;
+  await Order.updateOne(
+    { _id: oid, "items._id": iid },
+    { $set: { "items.$.revoked": revoked } },
+  );
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/don-hang");
+  revalidatePath(`/admin/don-hang/${orderId}`);
 }
 
 // ===== Sản phẩm: bật/tắt hiển thị nhanh =====

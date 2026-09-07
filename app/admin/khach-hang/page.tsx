@@ -150,8 +150,12 @@ export default async function AdminCustomers({ searchParams }: { searchParams: S
               customers.map((c) => (
                 <tr key={c.id} className="border-b border-line/60 last:border-0">
                   <td className="px-4 py-3">
-                    <p className="font-medium">{c.name ?? "—"}</p>
-                    <p className="break-all text-xs text-foreground/50">{c.email}</p>
+                    <Link href={`/admin/khach-hang/${c.id}`} className="group block max-w-xs">
+                      <p className="font-medium group-hover:text-accent">{c.name ?? "—"}</p>
+                      <p className="break-all text-xs text-foreground/50 group-hover:text-foreground/70">
+                        {c.email}
+                      </p>
+                    </Link>
                   </td>
                   <td className="px-4 py-3">
                     {c.role === "ADMIN" ? (

@@ -8,7 +8,7 @@ import { Pagination } from "@/components/admin/pagination";
 export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 20;
-const STATUS_ORDER = ["PENDING", "PAID", "CANCELLED", "FAILED", "REFUNDED"];
+const STATUS_ORDER = ["PENDING", "PAID", "CANCELLED", "FAILED"];
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 

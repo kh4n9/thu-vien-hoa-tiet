@@ -4,7 +4,6 @@ export const ORDER_STATUS_LABEL: Record<string, string> = {
   PAID: "Đã thanh toán",
   FAILED: "Thất bại",
   CANCELLED: "Đã hủy",
-  REFUNDED: "Hoàn tiền",
 };
 
 export const ORDER_STATUS_CLS: Record<string, string> = {
@@ -12,7 +11,6 @@ export const ORDER_STATUS_CLS: Record<string, string> = {
   PAID: "bg-green-600/10 text-green-600 dark:text-green-400",
   FAILED: "bg-accent/10 text-accent",
   CANCELLED: "bg-line text-foreground/50",
-  REFUNDED: "bg-line text-foreground/60",
 };
 
 export function statusBadge(status: string) {

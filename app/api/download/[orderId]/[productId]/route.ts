@@ -36,6 +36,15 @@ export async function GET(_req: NextRequest, { params }: { params: Params }) {
       (i: OrderItemBase & { _id: ObjectId }) =>
         (i.product as unknown as ProductDoc | null)?._id?.toString() === productId,
     );
+
+    // Sản phẩm đã bị admin thu hồi → từ chối tải.
+    if (item?.revoked) {
+      return NextResponse.json(
+        { error: "Sản phẩm này đã bị thu hồi. Liên hệ admin để biết thêm chi tiết." },
+        { status: 403 },
+      );
+    }
+
     fileKey = (item?.product as unknown as ProductDoc | undefined)?.fileKey ?? null;
   } catch {
     /* DB lỗi → từ chối */

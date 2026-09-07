@@ -6,7 +6,7 @@ const { Schema, model, models } = mongoose;
 export type ObjectId = mongoose.Types.ObjectId;
 
 export const ROLE_VALUES = ["CUSTOMER", "ADMIN"] as const;
-export const ORDER_STATUS_VALUES = ["PENDING", "PAID", "FAILED", "CANCELLED", "REFUNDED"] as const;
+export const ORDER_STATUS_VALUES = ["PENDING", "PAID", "FAILED", "CANCELLED"] as const;
 
 export type Role = (typeof ROLE_VALUES)[number];
 export type OrderStatus = (typeof ORDER_STATUS_VALUES)[number];
@@ -47,6 +47,8 @@ export interface OrderItemBase {
   product: ObjectId;
   title: string;
   price: number;
+  /** True khi admin thu hồi quyền tải sản phẩm này (đơn cũ không có field này). */
+  revoked?: boolean;
 }
 
 export interface OrderBase {
@@ -121,6 +123,7 @@ const orderItemSchema = new Schema<OrderItemBase>(
     product: { type: Schema.Types.ObjectId, ref: "Product", required: true },
     title: { type: String, required: true },
     price: { type: Number, required: true },
+    revoked: { type: Boolean, default: false },
   },
   { _id: true },
 );

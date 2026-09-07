@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useRef, useState } from "react";
 import Link from "next/link";
 import type { ProductFormState } from "@/lib/actions/admin";
 
@@ -19,6 +19,8 @@ type ProductFormProps = {
     specs?: string;
     license?: string;
     isActive?: boolean;
+    /** Khóa ảnh minh họa hiện có (hiển thị để giữ / xóa từng ảnh). */
+    images?: string[];
   };
   submitLabel: string;
 };
@@ -29,6 +31,31 @@ const labelClass = "text-sm font-medium";
 
 export function ProductForm({ action, categories, initial, submitLabel }: ProductFormProps) {
   const [state, formAction, pending] = useActionState(action, {});
+  const [newPreviews, setNewPreviews] = useState<{ file: File; url: string }[]>([]);
+  const [removedKeys, setRemovedKeys] = useState<string[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const existingImages = initial?.images ?? [];
+
+  function onPickImages(event: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.currentTarget.files ?? []);
+    setNewPreviews(files.map((f) => ({ file: f, url: URL.createObjectURL(f) })));
+  }
+
+  function removeNewImage(index: number) {
+    setNewPreviews((prev) => {
+      const rest = prev.filter((_, i) => i !== index);
+      // Đồng bộ lại input.files để FormData gửi đúng danh sách còn lại
+      const dt = new DataTransfer();
+      rest.forEach((p) => dt.items.add(p.file));
+      if (fileInputRef.current) fileInputRef.current.files = dt.files;
+      return rest;
+    });
+  }
+
+  function toggleKeepImage(key: string) {
+    setRemovedKeys((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
+  }
 
   return (
     <form action={formAction} className="space-y-5">
@@ -143,21 +170,89 @@ export function ProductForm({ action, categories, initial, submitLabel }: Produc
         </div>
         <div className="space-y-1.5">
           <label className={labelClass} htmlFor="images">
-            Ảnh xem trước (nhiều ảnh)
+            Ảnh minh họa (0, 1 hoặc nhiều ảnh)
           </label>
           <input
+            ref={fileInputRef}
             id="images"
             name="images"
             type="file"
             accept="image/*"
             multiple
+            onChange={onPickImages}
             className="block w-full text-sm text-foreground/70 file:mr-3 file:rounded-full file:border-0 file:bg-accent/10 file:px-4 file:py-2 file:text-sm file:font-medium file:text-accent hover:file:bg-accent/20"
           />
-          {initial?.id && (
-            <p className="text-xs text-foreground/50">Chọn ảnh mới nếu muốn thay thế bộ ảnh hiện tại.</p>
-          )}
         </div>
       </div>
+
+      {/* Quản lý ảnh trực quan */}
+      {(existingImages.length > 0 || newPreviews.length > 0) && (
+        <div className="rounded-2xl border border-line bg-background/40 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-sm font-semibold">Ảnh minh họa</p>
+            <p className="text-xs text-foreground/45">
+              {existingImages.length - removedKeys.length + newPreviews.length} ảnh sẽ lưu
+            </p>
+          </div>
+          <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5">
+            {existingImages.map((key) => {
+              const removed = removedKeys.includes(key);
+              return (
+                <div key={key} className="relative">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`/media/${key}`}
+                    alt="Ảnh hiện tại"
+                    className={`aspect-square w-full rounded-xl border object-cover ${
+                      removed ? "border-accent opacity-40" : "border-line"
+                    }`}
+                  />
+                  <label
+                    className={`absolute inset-x-1 bottom-1 flex items-center justify-center gap-1 rounded-lg px-1 py-1 text-[11px] font-semibold backdrop-blur ${
+                      removed
+                        ? "bg-accent text-white"
+                        : "bg-black/50 text-white"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={!removed}
+                      onChange={() => toggleKeepImage(key)}
+                      className="accent-[var(--accent)]"
+                    />
+                    {removed ? "Sẽ xóa" : "Giữ"}
+                  </label>
+                  {removed && <input type="hidden" name="deleteImage" value={key} />}
+                </div>
+              );
+            })}
+            {newPreviews.map((p, i) => (
+              <div key={p.url} className="relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={p.url}
+                  alt="Ảnh mới"
+                  className="aspect-square w-full rounded-xl border border-green-600/50 object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeNewImage(i)}
+                  className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-accent text-xs font-bold text-white shadow"
+                  aria-label="Bỏ ảnh này"
+                >
+                  ✕
+                </button>
+                <span className="absolute bottom-1 left-1 rounded-lg bg-green-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                  Mới
+                </span>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-foreground/45">
+            Ảnh mới sẽ được thêm vào, ảnh cũ bỏ tích “Giữ” sẽ bị xóa khi lưu.
+          </p>
+        </div>
+      )}
 
       <div className="grid gap-5 sm:grid-cols-2">
         <div className="space-y-1.5">

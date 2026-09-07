@@ -200,7 +200,7 @@ export default async function AdminDashboard() {
         <section className="rounded-2xl border border-line bg-surface p-5">
           <h3 className="mb-4 font-semibold">Tình trạng đơn hàng</h3>
           <div className="space-y-3">
-            {["PAID", "PENDING", "CANCELLED", "FAILED", "REFUNDED"].map((s) => {
+            {["PAID", "PENDING", "CANCELLED", "FAILED"].map((s) => {
               const count = statuses.find((x) => x._id === s)?.n ?? 0;
               const badge = statusBadge(s);
               return (

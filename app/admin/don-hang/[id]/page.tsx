@@ -4,7 +4,7 @@ import { connectDb } from "@/lib/db";
 import { Order, toObjectId } from "@/lib/models";
 import { formatVND } from "@/lib/utils";
 import { statusBadge, fmtDateTime } from "@/lib/status";
-import { updateOrderStatus } from "@/lib/actions/admin";
+import { updateOrderStatus, toggleOrderItemRevoked } from "@/lib/actions/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +16,6 @@ const TRANSITION_BUTTONS: Record<string, { status: string; label: string; cls: s
     { status: "CANCELLED", label: "Hủy đơn", cls: "bg-line text-foreground/60" },
     { status: "FAILED", label: "Đánh dấu thất bại", cls: "bg-accent/10 text-accent" },
   ],
-  PAID: [{ status: "REFUNDED", label: "Hoàn tiền", cls: "bg-accent/10 text-accent" }],
 };
 
 export default async function OrderDetailPage({ params }: { params: Promise<Params> }) {
@@ -35,7 +34,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<Para
         createdAt: Date;
         paidAt: Date | null;
         user: { email?: string; name?: string | null } | null;
-        items: { id: string; title: string; price: number; productSlug: string | null }[];
+        items: { id: string; title: string; price: number; revoked: boolean; productSlug: string | null }[];
       }
     | null = null;
 
@@ -60,6 +59,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<Para
         _id: { toString(): string };
         title: string;
         price: number;
+        revoked?: boolean;
         product: { slug?: string } | null;
       }>;
     };
@@ -77,6 +77,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<Para
         id: it._id.toString(),
         title: it.title,
         price: it.price,
+        revoked: !!it.revoked,
         productSlug: it.product?.slug ?? null,
       })),
     };
@@ -115,24 +116,52 @@ export default async function OrderDetailPage({ params }: { params: Promise<Para
                 <tr className="border-b border-line/60 text-left text-xs uppercase tracking-wide text-foreground/45">
                   <th className="px-5 py-2.5 font-medium">Sản phẩm</th>
                   <th className="px-5 py-2.5 font-medium">Giá</th>
+                  <th className="px-5 py-2.5 font-medium">Quyền tải</th>
                 </tr>
               </thead>
               <tbody>
                 {order.items.map((it) => (
                   <tr key={it.id} className="border-b border-line/60 last:border-0">
                     <td className="px-5 py-3">
-                      {it.productSlug ? (
-                        <Link
-                          href={`/bo-suu-tap/${it.productSlug}`}
-                          className="font-medium text-accent hover:underline"
-                        >
-                          {it.title}
-                        </Link>
-                      ) : (
-                        <span className="text-foreground/80">{it.title}</span>
-                      )}
+                      <div className="flex flex-wrap items-center gap-2">
+                        {it.productSlug ? (
+                          <Link
+                            href={`/bo-suu-tap/${it.productSlug}`}
+                            className="font-medium text-accent hover:underline"
+                          >
+                            {it.title}
+                          </Link>
+                        ) : (
+                          <span className="text-foreground/80">{it.title}</span>
+                        )}
+                        {it.revoked && (
+                          <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[11px] font-semibold text-accent">
+                            Đã thu hồi
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-5 py-3 font-semibold">{formatVND(it.price)}</td>
+                    <td className="px-5 py-3">
+                      {order.status === "PAID" ? (
+                        <form action={toggleOrderItemRevoked}>
+                          <input type="hidden" name="orderId" value={order.id} />
+                          <input type="hidden" name="itemId" value={it.id} />
+                          <button
+                            type="submit"
+                            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                              it.revoked
+                                ? "border-green-600/40 bg-green-600/10 text-green-600 hover:bg-green-600/20 dark:text-green-400"
+                                : "border-accent/40 bg-accent/10 text-accent hover:bg-accent/20"
+                            }`}
+                          >
+                            {it.revoked ? "Hủy thu hồi" : "Thu hồi"}
+                          </button>
+                        </form>
+                      ) : (
+                        <span className="text-xs text-foreground/40">—</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -192,7 +221,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<Para
                   {order.status === "PENDING"
                     ? "Đơn chờ VNPay xác nhận. Bạn có thể cập nhật thủ công nếu khách đã chuyển khoản nhưng IPN chưa về."
                     : order.status === "PAID"
-                      ? "Hoàn tiền chỉ ghi nhận trạng thái — việc chuyển tiền thực hiện ngoài hệ thống."
+                      ? "Đơn đã thanh toán. Nếu cần, thu hồi quyền tải theo từng sản phẩm ở mục “Sản phẩm trong đơn”."
                       : "Đơn ở trạng thái cuối, không còn thao tác."}
                 </p>
               </div>

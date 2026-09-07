@@ -26,6 +26,7 @@ export default async function EditProductPage({ params }: { params: Promise<Para
     fileName: string;
     fileSize: number;
     slug: string;
+    imageKeys: string[];
   } | null = null;
   let categories: { id: string; name: string }[] = [];
 
@@ -46,6 +47,7 @@ export default async function EditProductPage({ params }: { params: Promise<Para
               fileName: 1,
               fileSize: 1,
               slug: 1,
+              imageKeys: 1,
             })
             .lean()
         : null,
@@ -65,6 +67,7 @@ export default async function EditProductPage({ params }: { params: Promise<Para
         fileName: doc.fileName,
         fileSize: doc.fileSize,
         slug: doc.slug,
+        imageKeys: doc.imageKeys ?? [],
       };
     }
     categories = catDocs.map((c: CategoryDoc) => ({ id: c._id.toString(), name: c.name }));
@@ -99,6 +102,7 @@ export default async function EditProductPage({ params }: { params: Promise<Para
             specs: product.specs,
             license: product.license,
             isActive: product.isActive,
+            images: product.imageKeys,
           }}
         />
       </div>
