@@ -15,6 +15,8 @@ export type OrderStatus = (typeof ORDER_STATUS_VALUES)[number];
 export interface UserBase {
   email: string;
   name: string | null;
+  /** Ảnh đại diện từ OAuth (Google/GitHub…); tài khoản đăng ký thường để trống. */
+  image: string | null;
   passwordHash: string;
   role: Role;
 }
@@ -81,6 +83,7 @@ const userSchema = new Schema<UserBase>(
   {
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     name: { type: String, default: null },
+    image: { type: String, default: null },
     passwordHash: { type: String, required: true },
     role: { type: String, enum: ROLE_VALUES, default: "CUSTOMER" },
   },

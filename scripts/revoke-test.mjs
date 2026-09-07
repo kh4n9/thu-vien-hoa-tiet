@@ -70,11 +70,7 @@ async function main() {
     console.log("✘ Không có đơn PAID nào để test — bỏ qua.");
     process.exit(0);
   }
-  const [orderId, itemId, productId] = [
-    String(paid._id),
-    String(paid.items[0]._id),
-    String(paid.items[0].product),
-  ];
+  const [orderId, productId] = [String(paid._id), String(paid.items[0].product)];
   console.log(`Đơn test: ${paid.code} (order=${orderId}, product=${productId})`);
 
   async function download() {

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { GoogleSignInButton, OAuthDivider } from "@/components/oauth-buttons";
 
 export function LoginForm() {
   const router = useRouter();
@@ -44,7 +45,12 @@ export function LoginForm() {
           Đăng nhập để thanh toán và tải file trong Thư viện.
         </p>
 
-        <form onSubmit={onSubmit} className="mt-6 space-y-4">
+        <div className="mt-6">
+          <GoogleSignInButton callbackUrl="/" />
+          <OAuthDivider />
+        </div>
+
+        <form onSubmit={onSubmit} className="space-y-4">
           {error && (
             <p className="rounded-lg bg-accent/10 px-4 py-2.5 text-sm font-medium text-accent">
               {error}

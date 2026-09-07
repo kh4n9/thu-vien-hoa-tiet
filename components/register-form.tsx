@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import Link from "next/link";
 import { register, type RegisterState } from "@/lib/actions/auth";
+import { GoogleSignInButton, OAuthDivider } from "@/components/oauth-buttons";
 
 const initialState: RegisterState = {};
 
@@ -17,7 +18,12 @@ export function RegisterForm() {
           Tạo tài khoản để thanh toán và tải file trong Thư viện.
         </p>
 
-        <form action={formAction} className="mt-6 space-y-4">
+        <div className="mt-6">
+          <GoogleSignInButton callbackUrl="/" />
+          <OAuthDivider />
+        </div>
+
+        <form action={formAction} className="space-y-4">
           {state?.error && (
             <p className="rounded-lg bg-accent/10 px-4 py-2.5 text-sm font-medium text-accent">
               {state.error}

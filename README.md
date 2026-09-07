@@ -60,6 +60,7 @@ Mở http://localhost:3000. Đăng nhập admin bằng `ADMIN_EMAIL`/`ADMIN_PASS
 | `MONGODB_URI` | Connection string MongoDB Atlas (đã thêm tên database) |
 | `AUTH_SECRET` | Tạo bằng `npx auth secret` — ký session cookie |
 | `AUTH_URL` | URL site, VD `http://localhost:3000` |
+| `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | (tuỳ chọn) Đăng nhập bằng Google — xem mục "Đăng nhập Google" bên dưới |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Tài khoản admin khi seed |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_ENDPOINT` | Cloudflare R2 |
 | `VNPAY_TMN_CODE`, `VNPAY_HASH_SECRET`, `VNPAY_RETURN_URL`, `VNPAY_PAYMENT_URL`, `VNPAY_IPN_URL` | Cổng thanh toán VNPay |
@@ -84,6 +85,15 @@ Script kiểm tra: sinh URL thanh toán, verify chữ ký khứ hồi, từ ch�
 ```bash
 node --env-file=.env scripts/dbcheck.mjs
 ```
+
+## Đăng nhập Google (OAuth)
+
+1. Vào [Google Cloud Console](https://console.cloud.google.com) → chọn project → **APIs & Services → Credentials → Create credentials → OAuth client ID** (loại *Web application*).
+2. Điền:
+   - *Authorized JavaScript origins*: `http://localhost:3000`
+   - *Authorized redirect URIs*: `http://localhost:3000/api/auth/callback/google`
+3. Copy **Client ID** → `AUTH_GOOGLE_ID`, **Client secret** → `AUTH_GOOGLE_SECRET` trong `.env`, rồi restart dev server.
+4. Nút "Tiếp tục với Google" xuất hiện ở trang Đăng nhập / Đăng ký. Lần đăng nhập đầu tiên tự tạo tài khoản khách trong Mongo (không có mật khẩu — chỉ đăng nhập qua Google; nếu sau này muốn dùng nhiều nền tảng, thêm provider GitHub/Facebook tương tự trong `lib/auth.ts`).
 
 ## Chạy local trên Windows ARM64 (máy Snapdragon X, Surface ARM)
 
