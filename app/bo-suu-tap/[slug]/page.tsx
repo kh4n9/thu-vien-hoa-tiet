@@ -5,6 +5,7 @@ import { connectDb } from "@/lib/db";
 import { Product, type ProductDoc } from "@/lib/models";
 import { formatVND, formatBytes } from "@/lib/utils";
 import { AddToCart } from "@/components/add-to-cart";
+import { BuyNowButton } from "@/components/buy-now-button";
 import { MotifPlaceholder } from "@/components/product-card";
 
 export const dynamic = "force-dynamic";
@@ -139,11 +140,17 @@ export default async function ProductDetail({ params }: { params: Promise<Params
             công. Ảnh hiển thị chỉ để xem trước, file gốc có chất lượng đầy đủ.
           </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <AddToCart productId={product._id.toString()} />
+          <div className="flex flex-col gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <BuyNowButton productId={product._id.toString()} next={`/bo-suu-tap/${product.slug}`} />
+              <AddToCart
+                productId={product._id.toString()}
+                className="inline-flex h-12 items-center justify-center rounded-full border border-line bg-surface px-6 text-base font-semibold text-foreground/80 transition-colors hover:bg-line/40"
+              />
+            </div>
             <Link
               href="/gio-hang"
-              className="inline-flex h-12 items-center justify-center rounded-full border border-line bg-surface px-6 text-base font-semibold transition-colors hover:bg-line/40"
+              className="inline-flex h-12 items-center justify-center rounded-full border border-dashed border-line px-6 text-sm font-medium text-foreground/60 transition-colors hover:text-accent"
             >
               Xem giỏ hàng
             </Link>

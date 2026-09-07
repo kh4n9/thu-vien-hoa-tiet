@@ -7,7 +7,7 @@ import { auth } from "@/lib/auth";
 import { parseCart } from "@/lib/cart";
 import { generateOrderCode } from "@/lib/utils";
 import { createPaymentUrl } from "@/lib/vnpay";
-import { Order, Product, toObjectIds } from "@/lib/models";
+import { Order, Product, toObjectId, toObjectIds } from "@/lib/models";
 
 export async function createPayment(): Promise<{ url: string } | { error: string }> {
   const session = await auth();
@@ -47,6 +47,49 @@ export async function createPayment(): Promise<{ url: string } | { error: string
   const url = createPaymentUrl({
     txnRef: code,
     amount: total,
+    orderInfo: `Thanh toan don hang ${code}`,
+    ipAddr,
+    returnUrl,
+  });
+
+  return { url };
+}
+
+/** "Mua ngay" — tạo đơn cho 1 sản phẩm duy nhất rồi qua VNPay, không cần giỏ hàng. */
+export async function buyNow(input: {
+  productId: string;
+  next?: string;
+}): Promise<{ url: string } | { error: string }> {
+  const session = await auth();
+  if (!session?.user) redirect(`/dang-nhap?next=${input.next ?? "/"}`);
+
+  const productId = toObjectId(input.productId);
+  if (!productId) return { error: "Sản phẩm không hợp lệ." };
+
+  await connectDb();
+  const product = await Product.findOne({ _id: productId, isActive: true }).lean();
+  if (!product) return { error: "Sản phẩm không còn bán." };
+
+  const code = generateOrderCode();
+  await Order.create({
+    code,
+    user: session.user.id,
+    status: "PENDING",
+    total: product.price,
+    items: [{ product: productId, title: product.title, price: product.price }],
+  });
+
+  const headerList = await headers();
+  const forwarded = headerList.get("x-forwarded-for");
+  const ipAddr =
+    forwarded?.split(",")[0]?.trim() || headerList.get("x-real-ip") || "127.0.0.1";
+
+  const returnUrl =
+    process.env.VNPAY_RETURN_URL ?? `${process.env.AUTH_URL ?? "http://localhost:3000"}/checkout/return`;
+
+  const url = createPaymentUrl({
+    txnRef: code,
+    amount: product.price,
     orderInfo: `Thanh toan don hang ${code}`,
     ipAddr,
     returnUrl,
