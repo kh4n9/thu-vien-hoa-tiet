@@ -1,7 +1,8 @@
-import { PrismaClient } from "@prisma/client";
+// Seed cơ sở dữ liệu MongoDB: chuyên mục + tài khoản admin + sản phẩm mẫu.
+// Chạy: npm run db:seed  (cần MONGODB_URI trong .env)
+import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
-
-const prisma = new PrismaClient();
+import { User, Category, Product } from "../lib/models.ts";
 
 const categories = [
   { name: "Hoa sen", slug: "hoa-sen", description: "Hoa sen trong nghệ thuật Phật giáo và trang trí truyền thống." },
@@ -29,74 +30,79 @@ const sampleSpecs = [
 ];
 
 async function main() {
-  const adminEmail = process.env.ADMIN_EMAIL ?? "admin@thuvienhoatiet.vn";
+  const uri = process.env.MONGODB_URI;
+  if (!uri) {
+    throw new Error("Thiếu MONGODB_URI trong .env — dán connection string của MongoDB Atlas.");
+  }
+
+  await mongoose.connect(uri);
+  console.log("Đã kết nối MongoDB.");
+
+  const adminEmail = (process.env.ADMIN_EMAIL ?? "admin@thuvienhoatiet.vn").toLowerCase();
   const adminPassword = process.env.ADMIN_PASSWORD ?? "doi-mat-khau-nay";
 
   for (const [i, c] of categories.entries()) {
-    await prisma.category.upsert({
-      where: { slug: c.slug },
-      update: { name: c.name, description: c.description },
-      create: { name: c.name, slug: c.slug, description: c.description, order: i },
-    });
+    await Category.findOneAndUpdate(
+      { slug: c.slug },
+      { $set: { name: c.name, description: c.description, order: i } },
+      { upsert: true, returnDocument: "after" },
+    );
   }
 
-  const passwordHash = await bcrypt.hash(adminPassword, 10);
-  await prisma.user.upsert({
-    where: { email: adminEmail },
-    update: { role: "ADMIN" },
-    create: {
-      email: adminEmail,
-      name: "Quản trị viên",
-      passwordHash,
-      role: "ADMIN",
-    },
-  });
+  const existingAdmin = await User.findOne({ email: adminEmail });
+  if (existingAdmin) {
+    await User.updateOne({ _id: existingAdmin._id }, { $set: { role: "ADMIN" } });
+    console.log(`Admin đã tồn tại — chỉ cập nhật role ADMIN: ${adminEmail}`);
+  } else {
+    const passwordHash = await bcrypt.hash(adminPassword, 10);
+    await User.create({ email: adminEmail, name: "Quản trị viên", passwordHash, role: "ADMIN" });
+    console.log(`Tạo admin mới: ${adminEmail}`);
+  }
 
   const catBySlug = new Map(
-    (await prisma.category.findMany()).map((c) => [c.slug, c.id]),
+    (await Category.find().lean()).map((c) => [c.slug, c._id]),
   );
 
   for (const [i, p] of sampleProducts.entries()) {
     const categoryId = catBySlug.get(p.category);
     if (!categoryId) continue;
-    await prisma.product.upsert({
-      where: { slug: p.slug },
-      update: {
-        title: p.title,
-        description: p.description,
-        price: p.price,
-        format: p.format,
-        categoryId,
-        isActive: true,
-      },
-      create: {
-        slug: p.slug,
-        title: p.title,
-        description: p.description,
-        price: p.price,
-        format: p.format,
-        fileKey: "",
-        fileName: `mau-${p.slug}.${p.format.toLowerCase()}`,
+
+    const existing = await Product.findOne({ slug: p.slug });
+    const data = {
+      slug: p.slug,
+      title: p.title,
+      description: p.description,
+      price: p.price,
+      format: p.format,
+      category: categoryId,
+      isActive: true,
+    };
+    if (existing) {
+      await Product.updateOne({ _id: existing._id }, { $set: data });
+    } else {
+      const format = p.format.toLowerCase();
+      await Product.create({
+        ...data,
+        fileKey: `products/${p.slug}/mau-thu-vien.${format}`,
+        fileName: `mau-${p.slug}.${format}`,
         fileSize: 0,
         fileExt: p.format,
         imageKeys: [],
         specs: sampleSpecs[i % sampleSpecs.length],
         license: "Giấy phép sử dụng thương mại — xem trang Giấy phép.",
-        isActive: true,
-        categoryId,
-      },
-    });
+      });
+    }
   }
 
   console.log("Seed xong: categories + admin + sample products");
-  console.log(`  Admin: ${adminEmail}`);
 }
 
 main()
   .catch((e) => {
     console.error(e);
-    process.exit(1);
+    process.exitCode = 1;
   })
   .finally(async () => {
-    await prisma.$disconnect();
+    await mongoose.disconnect().catch(() => null);
+    process.exit(process.exitCode ?? 0);
   });

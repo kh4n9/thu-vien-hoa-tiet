@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
-import { prisma } from "@/lib/prisma";
+import { connectDb } from "@/lib/db";
+import { Product } from "@/lib/models";
 
 const base = process.env.AUTH_URL ?? "http://localhost:3000";
 
@@ -20,10 +21,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   let productRoutes: MetadataRoute.Sitemap = [];
   try {
-    const products = await prisma.product.findMany({
-      where: { isActive: true },
-      select: { slug: true, updatedAt: true },
-    });
+    await connectDb();
+    const products = await Product.find({ isActive: true })
+      .select({ slug: 1, updatedAt: 1 })
+      .lean();
     productRoutes = products.map((p) => ({
       url: `${base}/bo-suu-tap/${p.slug}`,
       lastModified: p.updatedAt,

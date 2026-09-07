@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { connectDb } from "@/lib/db";
+import { Category, Product, toObjectId, type CategoryDoc } from "@/lib/models";
 import { formatBytes, formatVND } from "@/lib/utils";
 import { ProductForm } from "@/components/admin/product-form";
 import { updateProduct } from "@/lib/actions/admin";
@@ -10,11 +11,66 @@ type Params = { id: string };
 
 export default async function EditProductPage({ params }: { params: Promise<Params> }) {
   const { id } = await params;
+  const productId = toObjectId(id);
 
-  const [product, categories] = await Promise.all([
-    prisma.product.findUnique({ where: { id } }).catch(() => null),
-    prisma.category.findMany({ orderBy: { order: "asc" } }).catch(() => []),
-  ]);
+  let product: {
+    id: string;
+    title: string;
+    description: string;
+    price: number;
+    format: string;
+    categoryId: string;
+    specs: string;
+    license: string;
+    isActive: boolean;
+    fileName: string;
+    fileSize: number;
+    slug: string;
+  } | null = null;
+  let categories: { id: string; name: string }[] = [];
+
+  try {
+    await connectDb();
+    const [doc, catDocs] = await Promise.all([
+      productId
+        ? Product.findById(productId)
+            .select({
+              title: 1,
+              description: 1,
+              price: 1,
+              format: 1,
+              category: 1,
+              specs: 1,
+              license: 1,
+              isActive: 1,
+              fileName: 1,
+              fileSize: 1,
+              slug: 1,
+            })
+            .lean()
+        : null,
+      Category.find().sort({ order: 1 }).lean(),
+    ]);
+    if (doc) {
+      product = {
+        id: doc._id.toString(),
+        title: doc.title,
+        description: doc.description,
+        price: doc.price,
+        format: doc.format,
+        categoryId: doc.category.toString(),
+        specs: doc.specs ? JSON.stringify(doc.specs, null, 2) : "",
+        license: doc.license ?? "",
+        isActive: doc.isActive,
+        fileName: doc.fileName,
+        fileSize: doc.fileSize,
+        slug: doc.slug,
+      };
+    }
+    categories = catDocs.map((c: CategoryDoc) => ({ id: c._id.toString(), name: c.name }));
+  } catch {
+    /* DB chưa kết nối */
+  }
 
   if (!product) notFound();
 
@@ -40,8 +96,8 @@ export default async function EditProductPage({ params }: { params: Promise<Para
             price: product.price,
             format: product.format,
             categoryId: product.categoryId,
-            specs: product.specs ? JSON.stringify(product.specs, null, 2) : "",
-            license: product.license ?? "",
+            specs: product.specs,
+            license: product.license,
             isActive: product.isActive,
           }}
         />

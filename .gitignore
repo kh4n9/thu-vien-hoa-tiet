@@ -24,6 +24,13 @@
 .DS_Store
 *.pem
 
+# Node LTS dự phòng cho Windows ARM64 (Node 26 arm64 lỗi TLS với Atlas)
+/.node-lts/
+/node-lts-*.zip
+
+# npm cache cục bộ (sandbox)
+/npm-cache/
+
 # debug
 npm-debug.log*
 yarn-debug.log*

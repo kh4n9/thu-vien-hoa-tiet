@@ -3,7 +3,8 @@
 import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { prisma } from "@/lib/prisma";
+import { connectDb } from "@/lib/db";
+import { User } from "@/lib/models";
 import { signOut } from "@/lib/auth";
 
 const registerSchema = z.object({
@@ -26,19 +27,19 @@ export async function register(_prev: RegisterState, formData: FormData) {
   }
 
   const email = parsed.data.email.toLowerCase();
-  const existing = await prisma.user.findUnique({ where: { email } });
+  await connectDb();
+
+  const existing = await User.exists({ email });
   if (existing) {
     return { error: "Email này đã được đăng ký." };
   }
 
   const passwordHash = await bcrypt.hash(parsed.data.password, 10);
-  await prisma.user.create({
-    data: {
-      email,
-      name: parsed.data.name,
-      passwordHash,
-      role: "CUSTOMER",
-    },
+  await User.create({
+    email,
+    name: parsed.data.name,
+    passwordHash,
+    role: "CUSTOMER",
   });
 
   redirect("/dang-nhap?registered=1");
@@ -47,4 +48,3 @@ export async function register(_prev: RegisterState, formData: FormData) {
 export async function logout() {
   await signOut({ redirectTo: "/" });
 }
-

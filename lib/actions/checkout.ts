@@ -2,11 +2,12 @@
 
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { connectDb } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { parseCart } from "@/lib/cart";
 import { generateOrderCode } from "@/lib/utils";
 import { createPaymentUrl } from "@/lib/vnpay";
+import { Order, Product, toObjectIds } from "@/lib/models";
 
 export async function createPayment(): Promise<{ url: string } | { error: string }> {
   const session = await auth();
@@ -16,32 +17,23 @@ export async function createPayment(): Promise<{ url: string } | { error: string
   const items = parseCart(cookieStore.get("cart")?.value);
   if (items.length === 0) return { error: "Giỏ hàng đang trống." };
 
-  const ids = items.map((i) => i.id);
-  const products = await prisma.product.findMany({
-    where: { id: { in: ids }, isActive: true },
-  });
+  const ids = toObjectIds(items.map((i) => i.id));
+  if (ids.length === 0) return { error: "Sản phẩm không hợp lệ." };
+
+  await connectDb();
+  const products = await Product.find({ _id: { $in: ids }, isActive: true }).lean();
   if (products.length === 0) return { error: "Sản phẩm không hợp lệ." };
 
-  const total = products.reduce((sum, p) => {
-    const qty = items.find((i) => i.id === p.id)?.qty ?? 1;
-    return sum + p.price * qty;
-  }, 0);
+  // File số: mỗi sản phẩm 1 bản.
+  const total = products.reduce((sum, p) => sum + p.price, 0);
 
   const code = generateOrderCode();
-  await prisma.order.create({
-    data: {
-      code,
-      userId: session.user.id,
-      status: "PENDING",
-      total,
-      items: {
-        create: products.map((p) => ({
-          productId: p.id,
-          title: p.title,
-          price: p.price,
-        })),
-      },
-    },
+  await Order.create({
+    code,
+    user: session.user.id,
+    status: "PENDING",
+    total,
+    items: products.map((p) => ({ product: p._id, title: p.title, price: p.price })),
   });
 
   const headerList = await headers();

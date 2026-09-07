@@ -1,17 +1,40 @@
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
+import { connectDb } from "@/lib/db";
+import { Product } from "@/lib/models";
 import { formatVND } from "@/lib/utils";
 import { deleteProduct } from "@/lib/actions/admin";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminProducts() {
-  const products = await prisma.product
-    .findMany({
-      orderBy: { createdAt: "desc" },
-      include: { category: { select: { name: true } } },
-    })
-    .catch(() => []);
+  let products: {
+    id: string;
+    title: string;
+    categoryName: string;
+    format: string;
+    price: number;
+    isActive: boolean;
+  }[] = [];
+  try {
+    await connectDb();
+    const docs = await Product.find()
+      .sort({ createdAt: -1 })
+      .populate("category", "name")
+      .lean();
+    products = docs.map((p) => {
+      const cat = p.category as { name?: string } | null;
+      return {
+        id: p._id.toString(),
+        title: p.title,
+        categoryName: cat?.name ?? "—",
+        format: p.format,
+        price: p.price,
+        isActive: p.isActive,
+      };
+    });
+  } catch {
+    /* DB chưa kết nối */
+  }
 
   return (
     <div>
@@ -32,14 +55,11 @@ export default async function AdminProducts() {
       ) : (
         <div className="space-y-2">
           {products.map((p) => (
-            <div
-              key={p.id}
-              className="flex flex-wrap items-center gap-4 rounded-xl border border-line bg-surface p-4"
-            >
+            <div key={p.id} className="flex flex-wrap items-center gap-4 rounded-xl border border-line bg-surface p-4">
               <div className="min-w-0 flex-1">
                 <p className="font-semibold">{p.title}</p>
                 <p className="text-xs text-foreground/50">
-                  {p.category.name} · {p.format} · {formatVND(p.price)} ·{" "}
+                  {p.categoryName} · {p.format} · {formatVND(p.price)} ·{" "}
                   {p.isActive ? (
                     <span className="text-green-600 dark:text-green-400">hiển thị</span>
                   ) : (

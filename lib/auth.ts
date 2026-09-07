@@ -2,7 +2,8 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { prisma } from "@/lib/prisma";
+import { connectDb } from "@/lib/db";
+import { User, type UserDoc } from "@/lib/models";
 
 const credentialsSchema = z.object({
   email: z.string().email(),
@@ -22,16 +23,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const parsed = credentialsSchema.safeParse(credentials);
         if (!parsed.success) return null;
 
-        const user = await prisma.user.findUnique({
-          where: { email: parsed.data.email.toLowerCase() },
-        });
+        await connectDb();
+        const user = (await User.findOne({
+          email: parsed.data.email.toLowerCase(),
+        }).lean()) as unknown as UserDoc | null;
         if (!user) return null;
 
         const valid = await bcrypt.compare(parsed.data.password, user.passwordHash);
         if (!valid) return null;
 
         return {
-          id: user.id,
+          id: user._id.toString(),
           email: user.email,
           name: user.name,
           role: user.role,

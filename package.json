@@ -6,17 +6,17 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
-  },
-  "prisma": {
-    "seed": "node prisma/seed.mjs"
+    "lint": "eslint",
+    "db:seed": "node --env-file-if-exists=.env scripts/seed.mjs",
+    "db:check": "node --env-file-if-exists=.env scripts/dbcheck.mjs",
+    "node-lts": "node scripts/fetch-node.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1127.0",
     "@aws-sdk/s3-request-presigner": "^3.1127.0",
-    "@prisma/client": "6.16.1",
     "bcryptjs": "^3.0.3",
     "clsx": "^2.1.1",
+    "mongoose": "^9.9.5",
     "next": "16.3.4",
     "next-auth": "^5.0.0-beta.32",
     "react": "19.2.8",
@@ -31,7 +31,6 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.4",
-    "prisma": "6.16.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

@@ -2,12 +2,15 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { connectDb } from "@/lib/db";
+import { Product, toObjectIds } from "@/lib/models";
 import { parseCart } from "@/lib/cart";
 import { formatVND } from "@/lib/utils";
 import { CheckoutButton } from "@/components/checkout-button";
 
 export const dynamic = "force-dynamic";
+
+type CheckoutLine = { id: string; title: string; price: number; qty: number };
 
 export default async function CheckoutPage() {
   const session = await auth();
@@ -16,17 +19,27 @@ export default async function CheckoutPage() {
   const cookieStore = await cookies();
   const items = parseCart(cookieStore.get("cart")?.value);
 
-  let products: Awaited<ReturnType<typeof getProducts>> = [];
+  let lines: CheckoutLine[] = [];
   if (items.length > 0) {
-    products = await getProducts(items.map((i) => i.id));
+    try {
+      await connectDb();
+      const docs = await Product.find({
+        _id: { $in: toObjectIds(items.map((i) => i.id)) },
+        isActive: true,
+      })
+        .select({ title: 1, price: 1 })
+        .lean();
+      const byId = new Map(docs.map((d) => [d._id.toString(), d]));
+      lines = items
+        .map((item) => {
+          const p = byId.get(item.id);
+          return p ? { id: p._id.toString(), title: p.title, price: p.price, qty: item.qty } : null;
+        })
+        .filter((l): l is NonNullable<typeof l> => l !== null);
+    } catch {
+      /* DB chưa kết nối */
+    }
   }
-
-  const lines = items
-    .map((item) => {
-      const p = products.find((x) => x.id === item.id);
-      return p ? { ...p, qty: item.qty } : null;
-    })
-    .filter((l): l is NonNullable<typeof l> => l !== null);
 
   const total = lines.reduce((sum, l) => sum + l.price * l.qty, 0);
 
@@ -69,11 +82,4 @@ export default async function CheckoutPage() {
       </div>
     </div>
   );
-}
-
-async function getProducts(ids: string[]) {
-  return prisma.product.findMany({
-    where: { id: { in: ids }, isActive: true },
-    select: { id: true, title: true, price: true },
-  });
 }

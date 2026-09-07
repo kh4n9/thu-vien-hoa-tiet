@@ -3,10 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { prisma } from "@/lib/prisma";
+import { connectDb } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { putObject, deleteObject } from "@/lib/r2";
 import { slugify } from "@/lib/utils";
+import { Product, Order, toObjectId } from "@/lib/models";
 
 export type ProductFormState = { error?: string };
 
@@ -34,7 +35,7 @@ function toProductImageKeys(images: File[], prefix: string): string[] {
 async function ensureUniqueSlug(base: string): Promise<string> {
   let slug = base;
   let n = 2;
-  while (await prisma.product.findUnique({ where: { slug } })) {
+  while (await Product.exists({ slug })) {
     slug = `${base}-${n}`;
     n += 1;
   }
@@ -98,23 +99,22 @@ export async function createProduct(_prev: ProductFormState, formData: FormData)
     );
   }
 
-  await prisma.product.create({
-    data: {
-      slug,
-      title: parsed.data.title,
-      description: parsed.data.description,
-      price: parsed.data.price,
-      format: parsed.data.format,
-      fileKey,
-      fileName: file.name,
-      fileSize: file.size,
-      fileExt: file.name.split(".").pop()?.toUpperCase() ?? parsed.data.format,
-      imageKeys,
-      specs: parseSpecs(parsed.data.specs),
-      license: parsed.data.license,
-      isActive: parsed.data.isActive,
-      categoryId: parsed.data.categoryId,
-    },
+  await connectDb();
+  await Product.create({
+    slug,
+    title: parsed.data.title,
+    description: parsed.data.description,
+    price: parsed.data.price,
+    format: parsed.data.format,
+    fileKey,
+    fileName: file.name,
+    fileSize: file.size,
+    fileExt: file.name.split(".").pop()?.toUpperCase() ?? parsed.data.format,
+    imageKeys,
+    specs: parseSpecs(parsed.data.specs) ?? null,
+    license: parsed.data.license ?? null,
+    isActive: parsed.data.isActive,
+    category: parsed.data.categoryId,
   });
 
   revalidatePath("/");
@@ -129,7 +129,9 @@ export async function updateProduct(
   await requireAdmin();
 
   const id = String(formData.get("id") ?? "");
-  const existing = await prisma.product.findUnique({ where: { id } });
+  const productId = toObjectId(id);
+  await connectDb();
+  const existing = await Product.findById(productId);
   if (!existing) return { error: "Sản phẩm không tồn tại." };
 
   const parsed = productSchema.safeParse({
@@ -183,24 +185,26 @@ export async function updateProduct(
     imageKeys = newKeys;
   }
 
-  await prisma.product.update({
-    where: { id },
-    data: {
-      title: parsed.data.title,
-      description: parsed.data.description,
-      price: parsed.data.price,
-      format: parsed.data.format,
-      fileKey,
-      fileName,
-      fileSize,
-      fileExt,
-      imageKeys,
-      specs: parseSpecs(parsed.data.specs),
-      license: parsed.data.license,
-      isActive: parsed.data.isActive,
-      categoryId: parsed.data.categoryId,
+  await Product.updateOne(
+    { _id: productId },
+    {
+      $set: {
+        title: parsed.data.title,
+        description: parsed.data.description,
+        price: parsed.data.price,
+        format: parsed.data.format,
+        fileKey,
+        fileName,
+        fileSize,
+        fileExt,
+        imageKeys,
+        specs: parseSpecs(parsed.data.specs) ?? null,
+        license: parsed.data.license ?? null,
+        isActive: parsed.data.isActive,
+        category: parsed.data.categoryId,
+      },
     },
-  });
+  );
 
   revalidatePath("/");
   revalidatePath("/bo-suu-tap");
@@ -213,21 +217,23 @@ export async function deleteProduct(formData: FormData) {
   await requireAdmin();
 
   const id = String(formData.get("id") ?? "");
-  const product = await prisma.product.findUnique({ where: { id } });
+  const productId = toObjectId(id);
+  await connectDb();
+  if (!productId) redirect("/admin/san-pham");
+
+  const product = await Product.findById(productId);
   if (!product) redirect("/admin/san-pham");
 
-  try {
-    // Sản phẩm chưa từng được đặt hàng → xóa hẳn (cả file trên R2).
-    await prisma.product.delete({ where: { id } });
-
+  // Sản phẩm đã nằm trong đơn hàng → không xóa (giữ lịch sử đơn), chỉ ẩn.
+  const used = await Order.exists({ "items.product": productId });
+  if (used) {
+    await Product.updateOne({ _id: productId }, { $set: { isActive: false } });
+  } else {
+    await Product.deleteOne({ _id: productId });
     await deleteObject(product.fileKey).catch(() => null);
     for (const key of product.imageKeys) {
       await deleteObject(key).catch(() => null);
     }
-  } catch {
-    // Sản phẩm đã nằm trong đơn hàng (FK ràng buộc OrderItem) → không xóa,
-    // chỉ ẩn khỏi gian hàng để không phá lịch sử đơn.
-    await prisma.product.update({ where: { id }, data: { isActive: false } });
   }
 
   revalidatePath("/");

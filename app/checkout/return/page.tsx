@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
+import { connectDb } from "@/lib/db";
+import { Order } from "@/lib/models";
 import { verifyVnpayQuery } from "@/lib/vnpay";
 import { formatVND } from "@/lib/utils";
 import { ClearCartOnSuccess } from "@/components/clear-cart";
@@ -20,12 +21,15 @@ export default async function ReturnPage({ searchParams }: { searchParams: Searc
 
   let order: { code: string; total: number; status: string } | null = null;
   if (result.txnRef) {
-    order = await prisma.order
-      .findUnique({
-        where: { code: result.txnRef },
-        select: { code: true, total: true, status: true },
-      })
-      .catch(() => null);
+    try {
+      await connectDb();
+      const doc = await Order.findOne({ code: result.txnRef })
+        .select({ code: 1, total: 1, status: 1 })
+        .lean();
+      if (doc) order = { code: doc.code, total: doc.total, status: doc.status };
+    } catch {
+      /* DB chưa kết nối */
+    }
   }
 
   const success =
@@ -35,17 +39,21 @@ export default async function ReturnPage({ searchParams }: { searchParams: Searc
     order.total === result.amount;
 
   if (success && order && order.status !== "PAID") {
-    await prisma.order
-      .update({
-        where: { code: order.code },
-        data: {
-          status: "PAID",
-          paidAt: new Date(),
-          vnpTxnRef: sp.vnp_TransactionNo ? String(sp.vnp_TransactionNo) : null,
-          paymentInfo: Object.fromEntries(query.entries()),
+    try {
+      await Order.updateOne(
+        { code: order.code },
+        {
+          $set: {
+            status: "PAID",
+            paidAt: new Date(),
+            vnpTxnRef: sp.vnp_TransactionNo ? String(sp.vnp_TransactionNo) : null,
+            paymentInfo: Object.fromEntries(query.entries()),
+          },
         },
-      })
-      .catch(() => null);
+      );
+    } catch {
+      /* bỏ qua — IPN sẽ tự cập nhật */
+    }
   }
 
   return (

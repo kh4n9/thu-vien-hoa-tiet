@@ -1,29 +1,55 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { connectDb } from "@/lib/db";
+import { Product, toObjectIds } from "@/lib/models";
 import { parseCart } from "@/lib/cart";
 import { formatVND } from "@/lib/utils";
 import { CartControls } from "@/components/cart-controls";
 
 export const dynamic = "force-dynamic";
 
+type CartLine = {
+  id: string;
+  slug: string;
+  title: string;
+  price: number;
+  format: string;
+  imageKeys: string[];
+};
+
 export default async function CartPage() {
   const cookieStore = await cookies();
   const session = await auth();
   const items = parseCart(cookieStore.get("cart")?.value);
 
-  let products: ProductForCart[] = [];
+  let products: CartLine[] = [];
   if (items.length > 0) {
-    const ids = items.map((i) => i.id);
-    products = await getProducts(ids);
+    try {
+      await connectDb();
+      const docs = await Product.find({
+        _id: { $in: toObjectIds(items.map((i) => i.id)) },
+        isActive: true,
+      })
+        .select({ slug: 1, title: 1, price: 1, format: 1, imageKeys: 1 })
+        .lean();
+      products = docs.map((d) => ({
+        id: d._id.toString(),
+        slug: d.slug,
+        title: d.title,
+        price: d.price,
+        format: d.format,
+        imageKeys: d.imageKeys ?? [],
+      }));
+    } catch {
+      /* DB chưa kết nối */
+    }
   }
 
   const lines = items
     .map((item) => {
       const product = products.find((p) => p.id === item.id);
-      if (!product) return null;
-      return { ...product, qty: item.qty };
+      return product ? { ...product, qty: item.qty } : null;
     })
     .filter((l): l is NonNullable<typeof l> => l !== null);
 
@@ -53,10 +79,7 @@ export default async function CartPage() {
       <div className="mt-8 grid gap-8 lg:grid-cols-3">
         <div className="space-y-3 lg:col-span-2">
           {lines.map((line) => (
-            <div
-              key={line.id}
-              className="flex items-center gap-4 rounded-2xl border border-line bg-surface p-4"
-            >
+            <div key={line.id} className="flex items-center gap-4 rounded-2xl border border-line bg-surface p-4">
               <div className="h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-background">
                 {line.imageKeys[0] ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -68,10 +91,7 @@ export default async function CartPage() {
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                <Link
-                  href={`/bo-suu-tap/${line.slug}`}
-                  className="line-clamp-1 font-semibold hover:text-accent"
-                >
+                <Link href={`/bo-suu-tap/${line.slug}`} className="line-clamp-1 font-semibold hover:text-accent">
                   {line.title}
                 </Link>
                 <p className="text-xs text-foreground/50">{line.format}</p>
@@ -114,28 +134,3 @@ export default async function CartPage() {
     </div>
   );
 }
-
-async function getProducts(ids: string[]): Promise<ProductForCart[]> {
-  return prisma.product
-    .findMany({
-      where: { id: { in: ids }, isActive: true },
-      select: {
-        id: true,
-        slug: true,
-        title: true,
-        price: true,
-        format: true,
-        imageKeys: true,
-      },
-    })
-    .catch(() => []);
-}
-
-type ProductForCart = {
-  id: string;
-  slug: string;
-  title: string;
-  price: number;
-  format: string;
-  imageKeys: string[];
-};

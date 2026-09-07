@@ -1,4 +1,5 @@
-import { prisma } from "@/lib/prisma";
+import { connectDb } from "@/lib/db";
+import { Order, type OrderItemBase, type ObjectId } from "@/lib/models";
 import { formatVND } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -12,12 +13,40 @@ const statusLabel: Record<string, { text: string; cls: string }> = {
 };
 
 export default async function AdminOrders() {
-  const orders = await prisma.order
-    .findMany({
-      orderBy: { createdAt: "desc" },
-      include: { user: { select: { email: true, name: true } }, items: true },
-    })
-    .catch(() => []);
+  let orders: {
+    id: string;
+    code: string;
+    status: string;
+    total: number;
+    createdAt: Date;
+    userLabel: string;
+    items: { id: string; title: string; price: number }[];
+  }[] = [];
+  try {
+    await connectDb();
+    const docs = await Order.find()
+      .sort({ createdAt: -1 })
+      .populate("user", "email name")
+      .lean();
+    orders = docs.map((o) => {
+      const user = o.user as { email?: string; name?: string | null } | null;
+      return {
+        id: o._id.toString(),
+        code: o.code,
+        status: o.status,
+        total: o.total,
+        createdAt: o.createdAt,
+        userLabel: user?.name ?? user?.email ?? "—",
+        items: o.items.map((item: OrderItemBase & { _id: ObjectId }) => ({
+          id: String(item._id),
+          title: item.title,
+          price: item.price,
+        })),
+      };
+    });
+  } catch {
+    /* DB chưa kết nối */
+  }
 
   return (
     <div>
@@ -37,7 +66,7 @@ export default async function AdminOrders() {
                   <div>
                     <p className="font-bold">{order.code}</p>
                     <p className="text-xs text-foreground/50">
-                      {order.user.name ?? order.user.email} ·{" "}
+                      {order.userLabel} ·{" "}
                       {new Intl.DateTimeFormat("vi-VN", {
                         dateStyle: "short",
                         timeStyle: "short",

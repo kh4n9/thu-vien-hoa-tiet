@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { prisma } from "@/lib/prisma";
+import { connectDb } from "@/lib/db";
+import { Product, type ProductDoc } from "@/lib/models";
 import { formatVND, formatBytes } from "@/lib/utils";
 import { AddToCart } from "@/components/add-to-cart";
 import { MotifPlaceholder } from "@/components/product-card";
@@ -10,23 +11,46 @@ export const dynamic = "force-dynamic";
 
 type Params = { slug: string };
 
+type ProductDetail = Omit<ProductDoc, "category" | "specs"> & {
+  category: { name: string; slug: string };
+  specs: Record<string, unknown> | null;
+};
+
 export async function generateMetadata({ params }: { params: Promise<Params> }): Promise<Metadata> {
   const { slug } = await params;
-  const product = await prisma.product
-    .findUnique({ where: { slug }, select: { title: true, description: true } })
-    .catch(() => null);
+  let title: string | undefined;
+  let description: string | undefined;
+  try {
+    await connectDb();
+    const product = await Product.findOne({ slug })
+      .select({ title: 1, description: 1 })
+      .lean();
+    title = product?.title;
+    description = product?.description;
+  } catch {
+    /* DB chưa kết nối */
+  }
   return {
-    title: product?.title ?? "Sản phẩm",
-    description: product?.description,
+    title: title ?? "Sản phẩm",
+    description,
   };
 }
 
 export default async function ProductDetail({ params }: { params: Promise<Params> }) {
   const { slug } = await params;
 
-  let product: Awaited<ReturnType<typeof getProduct>> | null = null;
+  let product: ProductDetail | null = null;
   try {
-    product = await getProduct(slug);
+    await connectDb();
+    const doc = await Product.findOne({ slug }).populate("category", "name slug").lean();
+    if (doc) {
+      const cat = doc.category as unknown as { name: string; slug: string };
+      product = {
+        ...doc,
+        category: cat,
+        specs: (doc.specs as Record<string, unknown> | null) ?? null,
+      };
+    }
   } catch {
     product = null;
   }
@@ -36,10 +60,7 @@ export default async function ProductDetail({ params }: { params: Promise<Params
   const specs: Record<string, string> | null =
     product.specs && typeof product.specs === "object" && !Array.isArray(product.specs)
       ? Object.fromEntries(
-          Object.entries(product.specs as Record<string, unknown>).map(([k, v]) => [
-            k,
-            String(v),
-          ]),
+          Object.entries(product.specs).map(([k, v]) => [k, String(v)]),
         )
       : null;
 
@@ -50,10 +71,7 @@ export default async function ProductDetail({ params }: { params: Promise<Params
           Bộ sưu tập
         </Link>
         <span className="mx-2">/</span>
-        <Link
-          href={`/bo-suu-tap?category=${product.category.slug}`}
-          className="hover:text-accent"
-        >
+        <Link href={`/bo-suu-tap?category=${product.category.slug}`} className="hover:text-accent">
           {product.category.name}
         </Link>
         <span className="mx-2">/</span>
@@ -66,12 +84,7 @@ export default async function ProductDetail({ params }: { params: Promise<Params
             <div className="grid gap-2">
               {product.imageKeys.map((key) => (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  key={key}
-                  src={`/media/${key}`}
-                  alt={product.title}
-                  className="w-full object-cover"
-                />
+                <img key={key} src={`/media/${key}`} alt={product.title} className="w-full object-cover" />
               ))}
             </div>
           ) : (
@@ -127,7 +140,7 @@ export default async function ProductDetail({ params }: { params: Promise<Params
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row">
-            <AddToCart productId={product.id} />
+            <AddToCart productId={product._id.toString()} />
             <Link
               href="/gio-hang"
               className="inline-flex h-12 items-center justify-center rounded-full border border-line bg-surface px-6 text-base font-semibold transition-colors hover:bg-line/40"
@@ -139,23 +152,4 @@ export default async function ProductDetail({ params }: { params: Promise<Params
       </div>
     </div>
   );
-}
-
-async function getProduct(slug: string) {
-  return prisma.product.findUnique({
-    where: { slug },
-    select: {
-      id: true,
-      slug: true,
-      title: true,
-      description: true,
-      price: true,
-      format: true,
-      fileSize: true,
-      imageKeys: true,
-      specs: true,
-      license: true,
-      category: { select: { name: true, slug: true } },
-    },
-  });
 }

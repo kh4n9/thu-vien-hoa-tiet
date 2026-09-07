@@ -1,26 +1,44 @@
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
+import { connectDb } from "@/lib/db";
+import { Order, Product } from "@/lib/models";
 import { formatVND } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminDashboard() {
-  const [productCount, activeCount, orderCount, revenueAgg, pendingOrders] = await Promise.all([
-    prisma.product.count().catch(() => 0),
-    prisma.product.count({ where: { isActive: true } }).catch(() => 0),
-    prisma.order.count().catch(() => 0),
-    prisma.order
-      .aggregate({ where: { status: "PAID" }, _sum: { total: true } })
-      .catch(() => ({ _sum: { total: null } })),
-    prisma.order.count({ where: { status: "PENDING" } }).catch(() => 0),
-  ]);
+  let productCount = 0;
+  let activeCount = 0;
+  let orderCount = 0;
+  let revenue = 0;
+  let pendingOrders = 0;
+
+  try {
+    await connectDb();
+    const [pc, ac, oc, revAgg, po] = await Promise.all([
+      Product.countDocuments().catch(() => 0),
+      Product.countDocuments({ isActive: true }).catch(() => 0),
+      Order.countDocuments().catch(() => 0),
+      Order.aggregate([
+        { $match: { status: "PAID" } },
+        { $group: { _id: null, total: { $sum: "$total" } } },
+      ]).catch(() => [] as { total: number }[]),
+      Order.countDocuments({ status: "PENDING" }).catch(() => 0),
+    ]);
+    productCount = pc;
+    activeCount = ac;
+    orderCount = oc;
+    revenue = revAgg[0]?.total ?? 0;
+    pendingOrders = po;
+  } catch {
+    /* DB chưa kết nối */
+  }
 
   const stats = [
     { label: "Sản phẩm", value: productCount, href: "/admin/san-pham" },
     { label: "Đang hiển thị", value: activeCount },
     { label: "Đơn hàng", value: orderCount, href: "/admin/don-hang" },
     { label: "Đơn chờ thanh toán", value: pendingOrders },
-    { label: "Doanh thu đã thu", value: formatVND(revenueAgg._sum.total ?? 0) },
+    { label: "Doanh thu đã thu", value: formatVND(revenue) },
   ];
 
   return (

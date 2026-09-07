@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { prisma } from "@/lib/prisma";
+import { connectDb } from "@/lib/db";
+import { Category, Product } from "@/lib/models";
+import { toCardProduct, type ProductForCard } from "@/lib/card";
 import { ProductCard } from "@/components/product-card";
 import { SortForm } from "@/components/sort-form";
 
@@ -9,6 +11,10 @@ export const metadata: Metadata = { title: "Bộ sưu tập họa tiết" };
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
+function escapeRegex(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 export default async function Browse({ searchParams }: { searchParams: SearchParams }) {
   const sp = await searchParams;
   const categorySlug = typeof sp.category === "string" ? sp.category : "";
@@ -16,11 +22,30 @@ export default async function Browse({ searchParams }: { searchParams: SearchPar
   const sort = typeof sp.sort === "string" ? sp.sort : "newest";
 
   let categories: { name: string; slug: string }[] = [];
-  let products: Awaited<ReturnType<typeof getProducts>> = [];
+  let products: ProductForCard[] = [];
 
   try {
-    categories = await prisma.category.findMany({ orderBy: { order: "asc" } });
-    products = await getProducts({ categorySlug, q, sort });
+    await connectDb();
+    const catDocs = await Category.find().sort({ order: 1 }).lean();
+    categories = catDocs.map((c) => ({ name: c.name, slug: c.slug }));
+
+    const cat = categorySlug ? await Category.findOne({ slug: categorySlug }).lean() : null;
+    const filter: Record<string, unknown> = { isActive: true };
+    if (cat) filter.category = cat._id;
+    if (q) filter.title = { $regex: escapeRegex(q), $options: "i" };
+
+    const orderBy: Record<string, 1 | -1> =
+      sort === "price-asc"
+        ? { price: 1 }
+        : sort === "price-desc"
+          ? { price: -1 }
+          : { createdAt: -1 };
+
+    const prodDocs = await Product.find(filter)
+      .sort(orderBy)
+      .populate("category", "name slug")
+      .lean();
+    products = prodDocs.map(toCardProduct);
   } catch {
     // DB chưa kết nối
   }
@@ -89,7 +114,7 @@ export default async function Browse({ searchParams }: { searchParams: SearchPar
       {products.length > 0 ? (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {products.map((p) => (
-            <ProductCard key={p.id} product={p} />
+            <ProductCard key={p.slug} product={p} />
           ))}
         </div>
       ) : (
@@ -100,40 +125,4 @@ export default async function Browse({ searchParams }: { searchParams: SearchPar
       )}
     </div>
   );
-}
-
-async function getProducts({
-  categorySlug,
-  q,
-  sort,
-}: {
-  categorySlug: string;
-  q: string;
-  sort: string;
-}) {
-  const orderBy =
-    sort === "price-asc"
-      ? { price: "asc" as const }
-      : sort === "price-desc"
-        ? { price: "desc" as const }
-        : { createdAt: "desc" as const };
-
-  return prisma.product.findMany({
-    where: {
-      isActive: true,
-      ...(categorySlug ? { category: { slug: categorySlug } } : {}),
-      ...(q ? { title: { contains: q, mode: "insensitive" } } : {}),
-    },
-    orderBy,
-    select: {
-      id: true,
-      slug: true,
-      title: true,
-      price: true,
-      format: true,
-      fileSize: true,
-      imageKeys: true,
-      category: { select: { name: true, slug: true } },
-    },
-  });
 }

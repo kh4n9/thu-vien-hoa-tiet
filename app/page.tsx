@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
+import { connectDb } from "@/lib/db";
+import { Category, Product } from "@/lib/models";
+import { toCardProduct, type ProductForCard } from "@/lib/card";
 import { ProductCard } from "@/components/product-card";
 import { Motif, MotifDivider } from "@/components/motif";
 
@@ -7,11 +9,19 @@ export const dynamic = "force-dynamic";
 
 export default async function Home() {
   let categories: { name: string; slug: string }[] = [];
-  let products: Awaited<ReturnType<typeof getProducts>> = [];
+  let products: ProductForCard[] = [];
 
   try {
-    categories = await prisma.category.findMany({ orderBy: { order: "asc" } });
-    products = await getProducts();
+    await connectDb();
+    const catDocs = await Category.find().sort({ order: 1 }).lean();
+    categories = catDocs.map((c) => ({ name: c.name, slug: c.slug }));
+
+    const prodDocs = await Product.find({ isActive: true })
+      .sort({ createdAt: -1 })
+      .limit(8)
+      .populate("category", "name slug")
+      .lean();
+    products = prodDocs.map(toCardProduct);
   } catch {
     // Database chưa kết nối — trang vẫn hiển thị với trạng thái trống.
   }
@@ -89,7 +99,7 @@ export default async function Home() {
         {products.length > 0 ? (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             {products.map((p) => (
-              <ProductCard key={p.id} product={p} />
+              <ProductCard key={p.slug} product={p} />
             ))}
           </div>
         ) : (
@@ -125,22 +135,4 @@ export default async function Home() {
       </section>
     </>
   );
-}
-
-async function getProducts() {
-  return prisma.product.findMany({
-    where: { isActive: true },
-    orderBy: { createdAt: "desc" },
-    take: 8,
-    select: {
-      id: true,
-      slug: true,
-      title: true,
-      price: true,
-      format: true,
-      fileSize: true,
-      imageKeys: true,
-      category: { select: { name: true, slug: true } },
-    },
-  });
 }

@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { connectDb } from "@/lib/db";
+import { Order } from "@/lib/models";
 import { verifyVnpayQuery } from "@/lib/vnpay";
 
 export async function GET(req: NextRequest) {
@@ -14,7 +15,8 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const order = await prisma.order.findUnique({ where: { code: result.txnRef } });
+    await connectDb();
+    const order = await Order.findOne({ code: result.txnRef }).lean();
     if (!order) {
       return Response.json({ RspCode: "01", Message: "Order not found" });
     }
@@ -25,15 +27,17 @@ export async function GET(req: NextRequest) {
       return Response.json({ RspCode: "00", Message: "Confirm Success" });
     }
 
-    await prisma.order.update({
-      where: { id: order.id },
-      data: {
-        status: "PAID",
-        paidAt: new Date(),
-        vnpTxnRef: url.searchParams.get("vnp_TransactionNo"),
-        paymentInfo: Object.fromEntries(url.searchParams.entries()),
+    await Order.updateOne(
+      { _id: order._id },
+      {
+        $set: {
+          status: "PAID",
+          paidAt: new Date(),
+          vnpTxnRef: url.searchParams.get("vnp_TransactionNo"),
+          paymentInfo: Object.fromEntries(url.searchParams.entries()),
+        },
       },
-    });
+    );
 
     return Response.json({ RspCode: "00", Message: "Confirm Success" });
   } catch {

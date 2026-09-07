@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { connectDb } from "@/lib/db";
 import { getSignedDownloadUrl } from "@/lib/r2";
+import { DownloadRecord, Order, toObjectId, type OrderItemBase, type ObjectId, type ProductDoc } from "@/lib/models";
 
 type Params = Promise<{ orderId: string; productId: string }>;
 
@@ -12,38 +13,48 @@ export async function GET(_req: NextRequest, { params }: { params: Params }) {
   }
 
   const { orderId, productId } = await params;
+  const oid = toObjectId(orderId);
+  const pid = toObjectId(productId);
+  const uid = toObjectId(session.user.id);
+  if (!oid || !pid || !uid) {
+    return NextResponse.json({ error: "Bạn không có quyền tải file này." }, { status: 403 });
+  }
 
-  const order = await prisma.order.findFirst({
-    where: {
-      id: orderId,
-      userId: session.user.id,
+  let fileKey: string | null = null;
+  try {
+    await connectDb();
+    const order = await Order.findOne({
+      _id: oid,
+      user: uid,
       status: "PAID",
-      items: { some: { productId } },
-    },
-    include: {
-      items: {
-        where: { productId },
-        include: { product: { select: { fileKey: true, title: true } } },
-      },
-    },
-  });
+      "items.product": pid,
+    })
+      .populate({ path: "items.product", select: "fileKey title" })
+      .lean();
 
-  if (!order || order.items.length === 0) {
+    const item = order?.items.find(
+      (i: OrderItemBase & { _id: ObjectId }) =>
+        (i.product as unknown as ProductDoc | null)?._id?.toString() === productId,
+    );
+    fileKey = (item?.product as unknown as ProductDoc | undefined)?.fileKey ?? null;
+  } catch {
+    /* DB lỗi → từ chối */
+  }
+
+  if (!fileKey) {
     return NextResponse.json(
       { error: "Bạn không có quyền tải file này." },
       { status: 403 },
     );
   }
 
-  const fileKey = order.items[0].product.fileKey;
-
   const url = await getSignedDownloadUrl(fileKey);
 
-  await prisma.downloadRecord
-    .create({
-      data: { userId: session.user.id, productId, orderId },
-    })
-    .catch(() => null);
+  await DownloadRecord.create({
+    user: uid,
+    product: pid,
+    order: oid,
+  }).catch(() => null);
 
   return NextResponse.redirect(url);
 }

@@ -1,11 +1,19 @@
-import { prisma } from "@/lib/prisma";
+import { connectDb } from "@/lib/db";
+import { Category } from "@/lib/models";
 import { ProductForm } from "@/components/admin/product-form";
 import { createProduct } from "@/lib/actions/admin";
 
 export const dynamic = "force-dynamic";
 
 export default async function NewProductPage() {
-  const categories = await prisma.category.findMany({ orderBy: { order: "asc" } }).catch(() => []);
+  let categories: { id: string; name: string }[] = [];
+  try {
+    await connectDb();
+    const docs = await Category.find().sort({ order: 1 }).lean();
+    categories = docs.map((c) => ({ id: c._id.toString(), name: c.name }));
+  } catch {
+    /* DB chưa kết nối */
+  }
 
   return (
     <div>
