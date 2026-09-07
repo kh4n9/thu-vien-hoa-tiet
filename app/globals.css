@@ -7,18 +7,18 @@
    bề mặt sáng như giấy dó. Chữ ký: hoa văn vàng lá lặp lại. */
 
 :root {
-  --background: #f2e9d7;
+  --background: #faf9f4;
   --foreground: #241a0f;
-  --surface: #faf3e4;
-  --surface-2: #efe4cc;
-  --line: #d3c196;
-  --line-strong: #b99a5a;
+  --surface: #ffffff;
+  --surface-2: #f2efe6;
+  --line: #e4dcc8;
+  --line-strong: #c9b47f;
   --accent: #a53227;
   --accent-strong: #84211a;
   --gold: #b98a33;
   --lacquer: #150d08;
   --lacquer-2: #201511;
-  --ivory: #f0e2c4;
+  --ivory: #f5ead0;
 }
 
 .dark {
