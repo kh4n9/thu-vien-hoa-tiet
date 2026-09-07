@@ -60,6 +60,26 @@ Mở http://localhost:3000. Đăng nhập admin bằng `ADMIN_EMAIL`/`ADMIN_PASS
 3. Khách quay lại `/checkout/return`; nếu đúng thì mở Thư viện.
 4. Nút "Tải file" gọi `/api/download/{orderId}/{productId}` → chỉ user có đơn `PAID` chứa sản phẩm mới nhận presigned URL từ R2.
 
+## Kiểm tra VNPay
+
+```bash
+node scripts/vnpay-selfcheck.mjs
+```
+
+Script kiểm tra: sinh URL thanh toán, verify chữ ký khứ hồi, từ chối chữ ký bị sửa, mô phỏng IPN thành công/thất bại và check cổng sandbox reachable. Chạy trước với secret giả để kiểm tra thuật toán; sau khi điền `VNPAY_TMN_CODE` + `VNPAY_HASH_SECRET` thật (lấy tại https://sandbox.vnpayment.vn) chạy lại để xác nhận, rồi test E2E bằng **thẻ test NCB**: số `9704198526191432198`, hạn `07/25`, OTP nhập `OTP`.
+
+## Chạy local trên Windows ARM64 (máy Snapdragon X, Surface ARM)
+
+Prisma **chưa hỗ trợ Windows ARM64** (không có engine `windows-arm64` kể cả ở bản 7.x). `node_modules` của dự án này đã chứa engine `linux-arm64` — dùng chính nó qua **WSL**:
+
+```bash
+wsl                                # vào WSL (ARM64, OpenSSL 3 — Ubuntu 22.04+)
+cd /mnt/c/Users/hoang/Desktop/thu-vien-hoa-tiet
+npm run dev                        # nếu WSL chưa có node: cài qua nvm/apt trước
+```
+
+Deploy Vercel không bị ảnh hưởng (build chạy trên Linux x64 của Vercel).
+
 ## Bảo mật file
 
 - Bucket R2 **private**, file gốc không bao giờ public trực tiếp.
