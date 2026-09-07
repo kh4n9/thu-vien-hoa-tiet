@@ -34,7 +34,7 @@
 | Hạng mục | Nội dung |
 |---|---|
 | **Tổng đầu tư phát triển (đề xuất)** | ~45.000.000 VNĐ (bảng giá chi tiết theo tính năng tại [Mục 7](#7-chi-phí-đầu-tư--bảng-giá-theo-tính-năng)) |
-| **Chi phí vận hành định kỳ** | ~400.000–800.000 VNĐ/tháng (domain, hosting, hạ tầng — chi tiết [Mục 8](#8-chi-phí-vận-hành-định-kỳ--phân-chia-giữa-các-bên)) |
+| **Chi phí vận hành định kỳ** | ~200.000–500.000 VNĐ/tháng (1 VPS chạy Dokploy + tên miền — chi tiết [Mục 8](#8-chi-phí-vận-hành-định-kỳ--phân-chia-giữa-các-bên)) |
 | **Thời gian triển khai** | Đã hoàn thành & chạy thử (VNPay sandbox) — bàn giao ngay sau khi đăng ký cổng thanh toán chính thức |
 | **Bảo hành** | **Trọn đời** cho phần sửa lỗi & hỗ trợ vận hành (điều khoản chi tiết [Mục 10](#10-chính-sách-bảo-hành-trọn-đời)) |
 | **Tính năng hiện có** | 20+ tính năng hoàn chỉnh (Mục 4) |
@@ -78,11 +78,11 @@ Chủ shop hiện bán bản vẽ họa tiết (DXF, AI, PDF…) bằng phương
 | Thành phần | Công nghệ | Ghi chú |
 |---|---|---|
 | **Frontend + Backend** | Next.js 16 (App Router, React 19, TypeScript, Tailwind CSS v4, Turbopack) | Toàn bộ trong 1 codebase — dễ bảo trì |
-| **Cơ sở dữ liệu** | MongoDB Atlas (Mongoose 9) | Lưu user, sản phẩm, đơn hàng, chuyên mục, lịch sử tải |
-| **Lưu trữ file bản vẽ & ảnh** | Cloudflare R2 (URL ký tạm — presigned URL) | File không nằm trên server web — an toàn, tiết kiệm băng thông |
+| **Cơ sở dữ liệu** | MongoDB (Mongoose 9) — chạy trong Docker trên VPS (không cần Atlas trả phí) | Lưu user, sản phẩm, đơn hàng, chuyên mục, lịch sử tải |
+| **Lưu trữ file bản vẽ & ảnh** | MinIO (S3 tương thích) chạy trên VPS — hoặc Cloudflare R2 gói miễn phí 10GB | File gửi qua **URL ký tạm (presigned)** — code không đổi, chỉ đổi endpoint |
 | **Thanh toán** | VNPay (HMAC-SHA512) — sandbox → production | IPN (thông báo giao dịch) + verify chữ ký khứ hồi |
 | **Xác thực** | Auth.js v5 (JWT session) + Google OAuth | Email/mật khẩu (bcrypt) + Google |
-| **Triển khai** | VPS Linux (Node.js) hoặc Vercel | Tùy chọn theo chi phí |
+| **Triển khai** | 1 VPS Linux chạy **Dokploy** (miễn phí, nguồn mở) — Docker quản lý app + MongoDB + MinIO, Traefik cấp SSL tự động (Let's Encrypt) | Chi phí = 1 VPS + tên miền |
 
 ### 3.2. Kiến trúc tổng quan
 
@@ -220,7 +220,7 @@ Khách hàng (PC/Mobile)
 |---|---|
 | **Hàng ngày (5 phút)** | Kiểm tra Dashboard: đơn chờ xử lý, đơn mới; kiểm tra email zin liên hệ; đăng sản phẩm mới nếu có |
 | **Hàng tuần (15 phút)** | Rà lại **đơn PENDING** quá 24h (khách có thể đã chuyển khoản ngoài luồng) → đối chiếu sao kê → đánh dấu thủ công; kiểm tra lịch sử tải có dấu hiệu lạ |
-| **Hàng tháng (30 phút)** | Xuất báo cáo doanh thu từ Dashboard; kiểm tra dung lượng R2 & Atlas; sao lưu dữ liệu (MongoDB Atlas backup tự động miễn phí 24h gần nhất); rà bảng giá/khuyến mãi |
+| **Hàng tháng (30 phút)** | Xuất báo cáo doanh thu từ Dashboard; kiểm tra dung lượng ổ đĩa VPS (file bản vẽ + DB); kiểm tra phiên backup tự động; rà bảng giá/khuyến mãi |
 
 ### 6.2. Quy trình xử lý "khách đã trả tiền nhưng đơn vẫn chờ"
 1. Khách báo đã chuyển khoản qua VNPay nhưng chưa nhận file → admin vào **Đơn hàng → Chi tiết**.
@@ -234,17 +234,17 @@ Khách hàng (PC/Mobile)
 3. Khách lập tức **mất nút tải** ở cả trang bản vẽ lẫn Thư viện; đường tải cũ bị chặn (403).
 4. Muốn khôi phục (khách đã khắc phục) → bấm **"Hủy thu hồi"**.
 
-### 6.4. Sao lưu & phục hồi
-- **MongoDB Atlas** (M0): backup tự động ~24h gần nhất, miễn phí — có thể phục hồi 1 click trong Console Atlas.
-- **File R2**: dữ liệu bản vẽ gốc + ảnh — nên tải về giữ bản sao local mỗi khi bộ sưu tập lớn (khuyến nghị tháng/lần).
-- **Mật khẩu/quyền**: nếu quên mật khẩu admin — đổi `ADMIN_PASSWORD` trong `.env`, xóa user admin trên Atlas, chạy `npm run db:seed`.
+### 6.4. Sao lưu & phục hồi (phương án 1 VPS)
+- **MongoDB (Docker trên VPS)**: bên triển khai cài sẵn **job sao lưu tự động** (mongodump chạy cron hằng đêm, giữ 7 phiên bản gần nhất) — khôi phục bằng 1 lệnh khi cần.
+- **File bản vẽ + ảnh (MinIO)**: đồng bộ volume MinIO sang thư mục backup trên VPS hoặc tải về máy local (khuyến nghị tháng/lần, nhất là khi bộ sưu tập lớn).
+- **Mật khẩu/quyền**: quên mật khẩu admin → đổi `ADMIN_PASSWORD` trong `.env`, xóa user admin trong DB, chạy `npm run db:seed`.
 
 ### 6.5. Giám sát & sự cố
 | Sự cố | Dấu hiệu | Xử lý |
 |---|---|---|
 | Trang không tải | Server down | Restart ứng dụng trên VPS / kiểm tra log |
 | Không thanh toán được | Bấm thanh toán lỗi | Xem log VNPay; kiểm tra `VNPAY_*` trong `.env`, thử script tự kiểm tra: `node scripts/vnpay-selfcheck.mjs` |
-| Không kết nối được DB | Cảnh báo trong log | Kiểm tra IP whitelist trong Atlas Console (mạng đổi IP vẫn truy cập được trước đây) |
+| Không kết nối được DB / MinIO | Cảnh báo trong log | `docker compose restart mongo minio` trên VPS (Dokploy); kiểm tra dung lượng ổ đĩa |
 | Đơn không chuyển PAID dù khách trả | IPN lỗi | Quy trình 6.2 (đánh dấu thủ công) |
 
 ---
@@ -291,29 +291,31 @@ Khách hàng (PC/Mobile)
 
 ## 8. CHI PHÍ VẬN HÀNH ĐỊNH KỲ & PHÂN CHIA GIỮA CÁC BÊN
 
-### 8.1. Bảng chi phí vận hành (ước tính)
+### 8.1. Bảng chi phí vận hành (phương án tối giản — 1 VPS + tên miền)
 
 | Hạng mục | Nhà cung cấp | Chi phí | Chu kỳ | Ghi chú |
 |---|---|---|---|---|
-| Tên miền (.com/.vn) | Nhà đăng ký tên miền | ~250.000–400.000 VNĐ | Năm | Không bắt buộc khi mới chạy thử local |
-| Hosting / VPS (2GB RAM, Linux) | VPS trong nước (Vietnix, AZDIGI…) hoặc Vercel | ~350.000–700.000 VNĐ | Tháng | Dự án Việt Nam nên ưu tiên VPS trong nước cho tốc độ & hỗ trợ |
-| MongoDB Atlas M0 (512MB) | MongoDB | **0 VNĐ** | — | Miễn phí; khi vượt 512MB nâng gói trả phí ~$57–108/tháng cho M10 |
-| Cloudflare R2 (10GB) | Cloudflare | **~0 VNĐ** | Tháng | Miễn phí 10GB + 1 triệu thao tác đọc/ghi/tháng; trả theo dung lượng vượt |
-| VNPay | VNPay | Phí giao dịch (thường ~0,4–1% + mức tối thiểu) | Theo giao dịch | Sandbox miễn phí; production có hợp đồng merchant |
-| Google OAuth / SSL / khác | Google, Let's Encrypt | **0 VNĐ** | — | SSL miễn phí qua Let's Encrypt |
-| **ƯỚC TỔNG (chưa phí giao dịch VNPay)** | | **~400.000–800.000 VNĐ/tháng** | | |
+| Tên miền (.com/.vn) | Nhà đăng ký tên miền | ~250.000–400.000 VNĐ | Năm | Chỉ ~20.000–35.000 VNĐ/tháng quy đổi |
+| **1 VPS Linux** chạy **Dokploy** | VPS trong nước (Vietnix, AZDIGI, VNG Cloud…) | ~200.000–450.000 VNĐ | Tháng | RAM 2–4GB đủ chạy: app + MongoDB + MinIO + Dokploy/Traefik |
+| MongoDB (Docker trên VPS) | Tự cài qua Dokploy | **0 VNĐ** | — | Miễn phí, không lo hạn mức 512MB của Atlas |
+| MinIO (S3, Docker trên VPS) | Tự cài qua Dokploy | **0 VNĐ** | — | Lưu file bản vẽ + ảnh ngay trên VPS |
+| Giấy chứng nhận SSL | Let's Encrypt (Dokploy cấp tự động) | **0 VNĐ** | — | HTTPS tự động |
+| VNPay | VNPay | Phí giao dịch (thường ~0,4–1% mỗi đơn) | Theo giao dịch | Sandbox miễn phí; production có hợp đồng merchant |
+| **ƯỚC TỔNG (chưa phí giao dịch VNPay)** | | **~200.000–500.000 VNĐ/tháng** | | **Chỉ 2 khoản: VPS + tên miền** |
+
+> 💡 **So với phương án cũ** (MongoDB Atlas trả phí + Cloudflare R2): với phương án 1 VPS, mọi chi phí ngoài chỉ gồm **VPS + tên miền**. Nhược điểm duy nhất: tự lo backup (đã cài sẵn job sao lưu tự động hằng đêm) và sự cố dồn về 1 máy — phù hợp quy mô shop nhỏ/khởi nghiệp.
 
 ### 8.2. Phân bổ trách nhiệm chi phí giữa các bên
 
 | Chi phí | Bên chịu | Lý do |
 |---|---|---|
-| Tên miền, hosting/VPS, tài khoản Atlas, R2, VNPay | **Bên thuê (khách hàng)** | Là chi phí hạ tầng định kỳ gắn với hoạt động kinh doanh của khách; khách sở hữu tài khoản → làm chủ dữ liệu |
+| Tên miền + VPS Dokploy (toàn bộ chi phí hạ tầng) | **Bên thuê (khách hàng)** | Khách sở hữu VPS + domain → làm chủ dữ liệu & code hoàn toàn |
 | Phí giao dịch VNPay (theo từng đơn) | **Bên thuê (khách hàng)** | Trích từ doanh thu bán hàng của khách |
 | Sửa lỗi, hỗ trợ vận hành, cập nhật bảo mật (trong phạm vi) | **Bên triển khai** | Nằm trong gói bảo hành trọn đời (Mục 10) |
 | Tính năng mới / thay đổi nghiệp vụ | **Bên thuê** | Báo giá riêng theo bảng giá Mục 7 / 9 |
 | Xử lý sự cố do thao tác sai của bên vận hành | **Bên thuê** (hỗ trợ miễn phí của bên triển khai) | Hướng dẫn + khôi phục được hỗ trợ trong bảo hành |
 
-> **Nguyên tắc:** bên triển khai chịu trách nhiệm **chất lượng phần mềm** (viết đúng, sửa lỗi, bảo trì code); bên thuê chịu trách nhiệm **chi phí hạ tầng & nội dung kinh doanh** (đăng file, giá bán, marketing…).
+> **Nguyên tắc:** bên triển khai chịu trách nhiệm **chất lượng phần mềm** (viết đúng, sửa lỗi, bảo trì code, cài đặt & giám sát hạ tầng trong phạm vi bảo hành); bên thuê chịu **chi phí thuê hạ tầng & nội dung kinh doanh** (đăng file, giá bán, marketing…).
 
 ---
 
@@ -392,11 +394,11 @@ Khách hàng (PC/Mobile)
 ## 11. BẢO MẬT & AN TOÀN DỮ LIỆU
 
 1. **Mật khẩu**: băm bằng bcrypt (không lưu mật khẩu dạng thô), phiên đăng nhập dùng JWT ký bằng khóa bí mật riêng.
-2. **File bản vẽ**: không public; chỉ phát hành qua **URL ký tạm có thời hạn** (R2 presigned). Kẻ dò đường dẫn không thể tải được file.
+2. **File bản vẽ**: không public; chỉ phát hành qua **URL ký tạm có thời hạn** (presigned — MinIO/R2). Kẻ dò đường dẫn không thể tải được file.
 3. **Phân quyền**: chỉ admin mới vào được khu quản trị; chỉ đúng tài khoản đã mua + đơn PAID + chưa thu hồi mới tải file.
 4. **Tấn công web**: input được kiểm tra (zod), query tham số hóa, regex tìm kiếm escape, HTTPS (Let's Encrypt) khi lên production.
 5. **CSRF/SSRF**: Auth.js có cơ chế CSRF token mặc định; thanh toán verify chữ ký HMAC-SHA512 từ VNPay (không tin dữ liệu gửi không đúng chữ ký).
-6. **Dữ liệu**: dữ liệu thuộc về khách hàng — bàn giao toàn bộ tài khoản DB/R2 khi kết thúc.
+6. **Dữ liệu**: dữ liệu thuộc về khách hàng — bàn giao toàn bộ DB/file code khi kết thúc.
 
 ---
 
@@ -405,8 +407,8 @@ Khách hàng (PC/Mobile)
 | Bước | Nội dung | Đơn vị thực hiện |
 |---|---|---|
 | 1 | Kiểm thử nghiệm thu (chạy thử toàn bộ luồng mua — thanh toán — tải) | Hai bên |
-| 2 | Khách cung cấp: tên miền, tài khoản hosting/VPS, tài khoản **VNPay production** (hợp đồng merchant), tài khoản Atlas/R2 (hoặc bên triển khai tạo giúp) | Khách hàng |
-| 3 | Bên triển khai: cấu hình production (HTTPS, env, VNPay thật, IP whitelist), chạy kiểm thử đầy đủ | Bên triển khai |
+| 2 | Khách cung cấp: **1 VPS Linux + tên miền** (đăng ký tài khoản VPS trong nước), tài khoản **VNPay production** (hợp đồng merchant); hoặc bên triển khai đặt VPS giúp | Khách hàng |
+| 3 | Bên triển khai: cài **Dokploy** lên VPS → deploy app + MongoDB + MinIO → cấu hình HTTPS/Let's Encrypt + env (VNPay thật) → chạy kiểm thử đầy đủ | Bên triển khai |
 | 4 | Đổ dữ liệu thật (bộ sưu tập bản vẽ + chuyên mục + giá), tạo tài khoản admin | Hai bên (nội dung do khách cung cấp) |
 | 5 | Đào tạo vận hành (2 buổi online hoặc video hướng dẫn) + bàn giao tài liệu + mã nguồn | Bên triển khai |
 | 6 | Ký biên bản nghiệm thu + kích hoạt chính sách bảo hành trọn đời | Hai bên |
@@ -416,7 +418,7 @@ Khách hàng (PC/Mobile)
 ## 13. CÂU HỎI THƯỜNG GẶP (FAQ)
 
 **Q1: Dữ liệu (file bản vẽ, khách hàng) có thuộc về tôi không?**
-→ Có toàn bộ. Bạn sở hữu tài khoản MongoDB, R2, tên miền; mã nguồn được bàn giao đầy đủ.
+→ Có toàn bộ. Bạn sở hữu VPS + tên miền (được bàn giao toàn quyền), dữ liệu nằm trong máy của bạn; mã nguồn được bàn giao đầy đủ.
 
 **Q2: Nếu sau này tôi muốn thêm cổng thanh toán MoMo / ZaloPay thì sao?**
 → Kiến trúc đã tách tầng thanh toán — thêm cổng mới là phát triển thêm theo bảng giá (ước ~4–6 triệu/cổng), không phải làm lại hệ thống.
@@ -429,6 +431,9 @@ Khách hàng (PC/Mobile)
 
 **Q5: Thời gian tối đa nhận file sau khi thanh toán?**
 → Tự động ngay trong vài giây sau khi VNPay xác nhận (IPN). Cực hiếm trường hợp IPN trễ → đánh dấu thủ công trong 1 phút.
+
+**Q6: Chi phí vận hành tối thiểu mỗi tháng là bao nhiêu?**
+→ Chỉ cần **1 VPS (khoảng 200.000–450.000 VNĐ/tháng) + tên miền (~30.000 VNĐ/tháng quy đổi)** — mọi thứ khác (MongoDB, lưu file, SSL) chạy ngay trên VPS qua Dokploy, miễn phí. Tổng ~**200.000–500.000 VNĐ/tháng**, cộng phí giao dịch VNPay theo từng đơn.
 
 ---
 
