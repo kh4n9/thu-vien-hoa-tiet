@@ -30,7 +30,7 @@ export default async function Home() {
     <>
       {/* ===== Hero — sơn mài & vàng lá ===== */}
       <section className="texture-lacquer relative flex flex-1 items-center justify-center overflow-hidden px-4 py-24">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(0,0,0,0.55)_100%)]" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,var(--lacquer-vignette)_100%)]" />
         <div className="relative mx-auto max-w-3xl text-center">
           <div className="mb-6 flex justify-center">
             <Motif className="h-14 w-14 opacity-90" strokeWidth={1.1} />
@@ -38,11 +38,11 @@ export default async function Home() {
           <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-gold/40 px-4 py-1.5 text-xs uppercase tracking-[0.22em] text-gold">
             Họa tiết cổ truyền Á Đông · Sẵn sàng cho sản xuất
           </p>
-          <h1 className="font-display text-[42px] font-medium leading-[1.05] tracking-tight text-ivory sm:text-6xl">
+          <h1 className="font-display text-[42px] font-medium leading-[1.05] tracking-tight text-lacquer-fg sm:text-6xl">
             Bản vẽ kỹ thuật <em className="text-gold">họa tiết</em>
             <br className="hidden sm:block" /> cho CNC, khắc gỗ & laser
           </h1>
-          <p className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-ivory/70 sm:text-lg">
+          <p className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-lacquer-soft sm:text-lg">
             Hoa sen, trống đồng, sóng nước — những mẫu bản vẽ DXF, AI, PDF đã sẵn dấu khắc, mở là
             dùng ngay cho xưởng sản xuất và mỹ nghệ.
           </p>
@@ -55,7 +55,7 @@ export default async function Home() {
             </Link>
             <Link
               href="/huong-dan"
-              className="inline-flex h-12 items-center rounded-full border border-gold/50 px-8 text-base font-medium text-ivory transition-colors hover:bg-ivory/10"
+              className="inline-flex h-12 items-center rounded-full border border-lacquer-fg/50 px-8 text-base font-medium text-lacquer-fg transition-colors hover:bg-lacquer-soft/15"
             >
               Cách dùng file
             </Link>
@@ -110,10 +110,10 @@ export default async function Home() {
       </section>
 
       {/* ===== Cách hoạt động ===== */}
-      <section className="texture-lacquer border-t border-ivory/10">
+      <section className="texture-lacquer border-t border-lacquer-line/60">
         <div className="mx-auto max-w-6xl px-4 py-14">
           <div className="mb-10 text-center">
-            <h2 className="font-display text-3xl font-medium text-ivory">Cách mua & tải</h2>
+            <h2 className="font-display text-3xl font-medium text-lacquer-fg">Cách mua & tải</h2>
             <MotifDivider className="mx-auto mt-5 max-w-xs" />
           </div>
           <div className="grid gap-8 sm:grid-cols-3">
@@ -125,8 +125,8 @@ export default async function Home() {
               <div key={f.t} className="flex gap-4">
                 <span className="font-display text-4xl font-light text-gold/70">{String(i + 1).padStart(2, "0")}</span>
                 <div className="space-y-1.5">
-                  <h3 className="font-display text-lg text-ivory">{f.t}</h3>
-                  <p className="text-sm leading-relaxed text-ivory/60">{f.d}</p>
+                  <h3 className="font-display text-lg text-lacquer-fg">{f.t}</h3>
+                  <p className="text-sm leading-relaxed text-lacquer-soft">{f.d}</p>
                 </div>
               </div>
             ))}

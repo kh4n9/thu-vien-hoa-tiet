@@ -11,7 +11,7 @@ export function ThemeToggle() {
       type="button"
       onClick={toggle}
       aria-label="Đổi giao diện sáng/tối"
-      className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-ivory/25 text-ivory transition-colors hover:border-gold hover:text-gold"
+      className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-lacquer-fg/25 text-lacquer-fg transition-colors hover:border-gold hover:text-gold"
     >
       {dark ? (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">

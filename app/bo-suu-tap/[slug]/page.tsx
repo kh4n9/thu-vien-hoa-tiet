@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
+import { auth } from "@/lib/auth";
 import { connectDb } from "@/lib/db";
-import { Product, type ProductDoc } from "@/lib/models";
+import { Order, Product, toObjectId, type ProductDoc } from "@/lib/models";
 import { formatVND, formatBytes } from "@/lib/utils";
 import { AddToCart } from "@/components/add-to-cart";
 import { BuyNowButton } from "@/components/buy-now-button";
@@ -57,6 +58,38 @@ export default async function ProductDetail({ params }: { params: Promise<Params
   }
 
   if (!product) notFound();
+
+  // Khách đã mua bản vẽ này chưa? Đã mua (đơn PAID, chưa bị thu hồi) → hiện nút Tải về
+  const session = await auth();
+  const productIdStr = product._id.toString();
+  let ownedOrderId: string | null = null;
+  let revoked = false;
+  if (session?.user) {
+    try {
+      const uid = toObjectId(session.user.id);
+      await connectDb();
+      const owned = await Order.findOne({
+        user: uid,
+        status: "PAID",
+        items: { $elemMatch: { product: product._id, revoked: { $ne: true } } },
+      })
+        .sort({ paidAt: -1 })
+        .select({ _id: 1 })
+        .lean();
+      ownedOrderId = owned ? owned._id.toString() : null;
+      if (!owned) {
+        revoked = Boolean(
+          await Order.exists({
+            user: uid,
+            status: "PAID",
+            items: { $elemMatch: { product: product._id, revoked: true } },
+          }),
+        );
+      }
+    } catch {
+      /* DB lỗi → coi như chưa mua */
+    }
+  }
 
   const specs: Record<string, string> | null =
     product.specs && typeof product.specs === "object" && !Array.isArray(product.specs)
@@ -141,19 +174,44 @@ export default async function ProductDetail({ params }: { params: Promise<Params
           </div>
 
           <div className="flex flex-col gap-3">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <BuyNowButton productId={product._id.toString()} next={`/bo-suu-tap/${product.slug}`} />
-              <AddToCart
-                productId={product._id.toString()}
-                className="inline-flex h-12 items-center justify-center rounded-full border border-line bg-surface px-6 text-base font-semibold text-foreground/80 transition-colors hover:bg-line/40"
-              />
-            </div>
-            <Link
-              href="/gio-hang"
-              className="inline-flex h-12 items-center justify-center rounded-full border border-dashed border-line px-6 text-sm font-medium text-foreground/60 transition-colors hover:text-accent"
-            >
-              Xem giỏ hàng
-            </Link>
+            {ownedOrderId ? (
+              <div className="space-y-2.5">
+                <a
+                  href={`/api/download/${ownedOrderId}/${productIdStr}`}
+                  className="inline-flex h-12 w-full items-center justify-center rounded-full bg-accent px-6 text-base font-semibold text-white transition-colors hover:bg-accent-strong"
+                >
+                  Tải về file đã mua
+                </a>
+                <p className="text-xs text-foreground/50">
+                  Bạn đã mua bản vẽ này — tải lại bất cứ lúc nào trong{" "}
+                  <Link href="/thu-vien" className="font-medium text-accent hover:underline">
+                    Thư viện của tôi
+                  </Link>
+                  .
+                </p>
+              </div>
+            ) : revoked ? (
+              <div className="rounded-xl border border-accent/30 bg-accent/5 px-4 py-4 text-sm text-foreground/60">
+                Bản vẽ này đã bị <b className="font-semibold text-accent">thu hồi</b>. Liên hệ admin
+                nếu bạn cần được hỗ trợ.
+              </div>
+            ) : (
+              <>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <BuyNowButton productId={productIdStr} next={`/bo-suu-tap/${product.slug}`} />
+                  <AddToCart
+                    productId={productIdStr}
+                    className="inline-flex h-12 items-center justify-center rounded-full border border-line bg-surface px-6 text-base font-semibold text-foreground/80 transition-colors hover:bg-line/40"
+                  />
+                </div>
+                <Link
+                  href="/gio-hang"
+                  className="inline-flex h-12 items-center justify-center rounded-full border border-dashed border-line px-6 text-sm font-medium text-foreground/60 transition-colors hover:text-accent"
+                >
+                  Xem giỏ hàng
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </div>
