@@ -2,7 +2,7 @@ import Link from "next/link";
 import { connectDb } from "@/lib/db";
 import { Product } from "@/lib/models";
 import { formatVND } from "@/lib/utils";
-import { deleteProduct } from "@/lib/actions/admin";
+import { DeleteProductButton } from "@/components/admin/delete-product-button";
 
 export const dynamic = "force-dynamic";
 
@@ -74,18 +74,7 @@ export default async function AdminProducts() {
                 >
                   Sửa
                 </Link>
-                <form action={deleteProduct}>
-                  <input type="hidden" name="id" value={p.id} />
-                  <button
-                    type="submit"
-                    onClick={(e) => {
-                      if (!confirm(`Xóa sản phẩm "${p.title}"?`)) e.preventDefault();
-                    }}
-                    className="inline-flex h-9 items-center rounded-full border border-line px-4 text-sm font-medium text-accent transition-colors hover:bg-accent/10"
-                  >
-                    Xóa
-                  </button>
-                </form>
+                <DeleteProductButton id={p.id} title={p.title} />
               </div>
             </div>
           ))}
