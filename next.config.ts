@@ -8,6 +8,8 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.resolve(__dirname),
   },
+  // Cho phép dev resources từ 127.0.0.1 (browser dùng http://127.0.0.1:3000 khi test E2E).
+  allowedDevOrigins: ["127.0.0.1"],
 };
 
 export default nextConfig;

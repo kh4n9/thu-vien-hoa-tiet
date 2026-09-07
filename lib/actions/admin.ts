@@ -7,7 +7,7 @@ import { connectDb } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { putObject, deleteObject } from "@/lib/r2";
 import { slugify } from "@/lib/utils";
-import { Product, Order, toObjectId } from "@/lib/models";
+import { Product, Order, Category, toObjectId } from "@/lib/models";
 
 export type ProductFormState = { error?: string };
 
@@ -239,4 +239,173 @@ export async function deleteProduct(formData: FormData) {
   revalidatePath("/");
   revalidatePath("/bo-suu-tap");
   redirect("/admin/san-pham");
+}
+
+// ===== Đơn hàng: đổi trạng thái =====
+const ORDER_STATUS_VALUES = ["PENDING", "PAID", "FAILED", "CANCELLED", "REFUNDED"] as const;
+
+const ALLOWED_TRANSITIONS: Record<string, string[]> = {
+  PENDING: ["PAID", "CANCELLED", "FAILED"],
+  PAID: ["REFUNDED"],
+};
+
+export async function updateOrderStatus(formData: FormData) {
+  await requireAdmin();
+
+  const id = String(formData.get("orderId") ?? "");
+  const status = String(formData.get("status") ?? "");
+  if (!ORDER_STATUS_VALUES.includes(status as (typeof ORDER_STATUS_VALUES)[number])) return;
+
+  const oid = toObjectId(id);
+  if (!oid) return;
+
+  await connectDb();
+  const order = await Order.findById(oid).select({ status: 1 }).lean();
+  if (!order) return;
+
+  const allowed = ALLOWED_TRANSITIONS[order.status] ?? [];
+  if (!allowed.includes(status)) return;
+
+  const $set: Record<string, unknown> = { status };
+  if (status === "PAID") $set.paidAt = new Date();
+  if (status === "PENDING") $set.paidAt = null;
+  await Order.updateOne({ _id: oid }, { $set });
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/don-hang");
+  revalidatePath(`/admin/don-hang/${id}`);
+}
+
+// ===== Sản phẩm: bật/tắt hiển thị nhanh =====
+export async function toggleProductActive(formData: FormData) {
+  await requireAdmin();
+
+  const id = String(formData.get("id") ?? "");
+  const productId = toObjectId(id);
+  if (!productId) return;
+
+  await connectDb();
+  const product = await Product.findById(productId).select({ isActive: 1 }).lean();
+  if (!product) return;
+  await Product.updateOne({ _id: productId }, { $set: { isActive: !product.isActive } });
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/san-pham");
+  revalidatePath("/");
+  revalidatePath("/bo-suu-tap");
+}
+
+// ===== Chuyên mục =====
+export type CategoryFormState = { error?: string };
+
+const categorySchema = z.object({
+  name: z.string().trim().min(2, "Tên chuyên mục tối thiểu 2 ký tự").max(100),
+  slug: z
+    .string()
+    .trim()
+    .min(2, "Slug tối thiểu 2 ký tự")
+    .regex(/^[a-z0-9-]+$/, "Slug chỉ gồm chữ thường, số và dấu gạch ngang"),
+  description: z.string().trim().max(300, "Mô tả tối đa 300 ký tự").optional(),
+  order: z.coerce.number().int().min(0).default(0),
+});
+
+export async function createCategory(
+  _prev: CategoryFormState,
+  formData: FormData,
+): Promise<CategoryFormState> {
+  await requireAdmin();
+
+  const parsed = categorySchema.safeParse({
+    name: formData.get("name"),
+    slug: formData.get("slug"),
+    description: formData.get("description") || undefined,
+    order: formData.get("order") ?? 0,
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  }
+
+  await connectDb();
+  const dup = await Category.exists({ slug: parsed.data.slug });
+  if (dup) return { error: "Slug đã tồn tại — hãy chọn slug khác." };
+
+  await Category.create({
+    name: parsed.data.name,
+    slug: parsed.data.slug,
+    description: parsed.data.description ?? null,
+    order: parsed.data.order,
+  });
+
+  revalidatePath("/");
+  revalidatePath("/bo-suu-tap");
+  redirect("/admin/chuyen-muc");
+}
+
+export async function updateCategory(
+  _prev: CategoryFormState,
+  formData: FormData,
+): Promise<CategoryFormState> {
+  await requireAdmin();
+
+  const id = String(formData.get("id") ?? "");
+  const categoryId = toObjectId(id);
+
+  const parsed = categorySchema.safeParse({
+    name: formData.get("name"),
+    slug: formData.get("slug"),
+    description: formData.get("description") || undefined,
+    order: formData.get("order") ?? 0,
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  }
+  if (!categoryId) return { error: "Chuyên mục không tồn tại." };
+
+  await connectDb();
+  const existing = await Category.findById(categoryId);
+  if (!existing) return { error: "Chuyên mục không tồn tại." };
+
+  const dup = await Category.exists({ slug: parsed.data.slug, _id: { $ne: categoryId } });
+  if (dup) return { error: "Slug đã tồn tại — hãy chọn slug khác." };
+
+  await Category.updateOne(
+    { _id: categoryId },
+    {
+      $set: {
+        name: parsed.data.name,
+        slug: parsed.data.slug,
+        description: parsed.data.description ?? null,
+        order: parsed.data.order,
+      },
+    },
+  );
+
+  revalidatePath("/");
+  revalidatePath("/bo-suu-tap");
+  revalidatePath("/admin/chuyen-muc");
+  redirect("/admin/chuyen-muc");
+}
+
+export async function deleteCategory(formData: FormData): Promise<CategoryFormState> {
+  await requireAdmin();
+
+  const id = String(formData.get("id") ?? "");
+  const categoryId = toObjectId(id);
+  if (!categoryId) return { error: "Chuyên mục không tồn tại." };
+
+  await connectDb();
+  const category = await Category.findById(categoryId);
+  if (!category) return { error: "Chuyên mục không tồn tại." };
+
+  const used = await Product.exists({ category: categoryId });
+  if (used) {
+    return { error: `Chuyên mục "${category.name}" còn sản phẩm — không thể xóa.` };
+  }
+
+  await Category.deleteOne({ _id: categoryId });
+
+  revalidatePath("/");
+  revalidatePath("/bo-suu-tap");
+  revalidatePath("/admin/chuyen-muc");
+  redirect("/admin/chuyen-muc");
 }
